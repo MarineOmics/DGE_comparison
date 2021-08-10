@@ -171,7 +171,7 @@ df_log <- cpm( y, log = TRUE, prior.count = 2 )
 N <- plotMDS( df_log )
 ```
 
-![](DEG_comparison_files/figure-markdown_github/unnamed-chunk-2-1.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-2-1.png)
 
 ``` r
 # Hard to read right, right?
@@ -207,7 +207,7 @@ ordispider( scores,as.factor( targets$grouping ),label = F ) # Vectors connectin
 ordilabel( scores, cex = 0.5) # Label sample IDs
 ```
 
-![](DEG_comparison_files/figure-markdown_github/unnamed-chunk-2-2.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-2-2.png)
 
 ``` r
 logCPM.pca <- prcomp( t ( df_log ) )
@@ -227,7 +227,7 @@ ordihull( logCPM.pca$x, targets$grouping,
           alpha = 75,cex = .5, label = T )
 ```
 
-![](DEG_comparison_files/figure-markdown_github/unnamed-chunk-2-3.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-2-3.png)
 
 # DGE with interactive effect using edgeR
 
@@ -253,7 +253,7 @@ y1 <- estimateDisp( y, robust = TRUE ) # Estimate mean dispersal
 plotBCV( y1 ) 
 ```
 
-![](DEG_comparison_files/figure-markdown_github/unnamed-chunk-3-1.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-3-1.png)
 
 ``` r
 # Fit quasi-likelihood, neg binom linear regression
@@ -261,7 +261,7 @@ multi_fit <- glmQLFit( y1, design_multi ) # Fit multivariate model to counts
 plotQLDisp( multi_fit, col.shrunk = "red", col.raw = "black", col.trend = NULL )
 ```
 
-![](DEG_comparison_files/figure-markdown_github/unnamed-chunk-3-2.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-3-2.png)
 
 ``` r
 # Test for effect of pCO2
@@ -281,7 +281,7 @@ summary( is.de_tr_pCO2 )
 plotMD( tr_pCO2 )
 ```
 
-![](DEG_comparison_files/figure-markdown_github/unnamed-chunk-3-3.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-3-3.png)
 
 ``` r
 # Interaction
@@ -301,7 +301,7 @@ summary( is.de_int )
 plotMD( tr_int )
 ```
 
-![](DEG_comparison_files/figure-markdown_github/unnamed-chunk-3-4.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-3-4.png)
 
 # DGE with interactive effect using Limma-voom
 
@@ -312,7 +312,7 @@ plotMD( tr_int )
 voom <- voom( y, design_multi, plot = T )
 ```
 
-![](DEG_comparison_files/figure-markdown_github/unnamed-chunk-4-1.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-4-1.png)
 
 ``` r
 # Fit using voom
@@ -377,7 +377,7 @@ ggplot( data = voom_edgeR_int_comp,
 
     ## `geom_smooth()` using formula 'y ~ x'
 
-![](DEG_comparison_files/figure-markdown_github/unnamed-chunk-5-1.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-5-1.png)
 
 ``` r
 # Correlation of logFC
@@ -390,4 +390,4 @@ ggplot( data = voom_edgeR_int_comp,
 
     ## `geom_smooth()` using formula 'y ~ x'
 
-![](DEG_comparison_files/figure-markdown_github/unnamed-chunk-5-2.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-5-2.png)
