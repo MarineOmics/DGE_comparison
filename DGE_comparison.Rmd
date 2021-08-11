@@ -1,30 +1,59 @@
 ---
-title: "DEG_comparison"
+title: "DGE_comparison"
 author: "Sam Bogan"
 date: "8/1/2021"
-output: github_document
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
 ---
 
 This markdown is a work in progress and walks through multifactorial modeling of gene expression using edgeR, DESeq2, limma-voom, EBSeq, and approaches for fitting models using customized code.
 
-```{r setup, include=FALSE}
+```{r setup, include = FALSE}
 
 # Set root directory
 knitr::opts_knit$set( root.dir = '~/Documents/GitHub/DEG_comparison//' )
 
+colorize <- function( x, color ) {
+  if ( knitr::is_latex_output() ) {
+    sprintf("\\textcolor{%s}{%s}", color, x)
+  } else if ( knitr::is_github_output() ) {
+    sprintf( "<span style='color: %s;'>%s</span>", color,
+      x)
+  } else x
+}
+
+# Set bash code chunks to use bash_profile
+knitr::opts_chunk$set( engine.opts = list( bash = "-l" ) )
+
+```
+
+```{r, results = FALSE, message = FALSE, warning = FALSE}
+
 # Load packages
+library( DESeq2 )
 library( edgeR )
+library( EBSeq )
 library( tidyverse )
 library( ape )
 library( vegan )
 
 ```
 
-#Load read count data, add metadata, plot initial PCA
-
 Read counts were produced by RSEM, mapped to a *de novo* transcriptome assembly for the Antarctic pteropod *Limacina helicina antarctica*.
 
-```{r}
+#Features of Popular DGE packages
+| Program | Distribution | Dispersal | Random eff. | Continuous var. | Interactive eff. |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| EBSeq | Negative binomial | ? | ✖ | ✖ | ✖ |
+| edgeR | Negative binomial | Avg., trended, tagwise, and Bayesian shrinkage options | ✔ |  ✔ |  ✔ |  ✔ | 
+| DESeq2 | Negative binomial | Avg., trended, tagwise, and shrinkage options, | ✔ | ✔ | ✔|
+| limma-voom | Mean-variance estimate | Empirical Bayes smooth | ✔ | ✔ |  ✔|  
+
+#Filter and visualize read counts
+
+```{r, message = FALSE, warning = FALSE}
 
 # Read in matrix of RSEM expected read counts
 data <- read.delim( "Input_data/expected_counts.matrix", sep = "\t", header = T, row.names = 1 )
@@ -53,7 +82,7 @@ day <- as.numeric( c( 7, 7, 7, .5, .5, .5,
 targets <- data.frame( pCO2, day, treatment )
 targets$grouping <- paste( targets$pCO2, targets$day, sep = "." )
 
-Group <- factor( paste( targets$day, targets$pCO2, sep="_" ) )
+Group <- factor( paste( targets$day, targets$pCO2, sep = "_" ) )
 cbind( targets, Group = Group )
 
 # Data must be rounded to nearest integer in order to be fit for negative binomial distribution
@@ -62,11 +91,19 @@ data_input <- round( data )
 # Peak at rounded data
 head( data_input )
 
+# Plot distribution of unfiltered read counts across all samples 
+ggplot( data = data.frame( rowMeans( data_input ) ),
+        aes( x = rowMeans.data_input. ) ) +
+  geom_density( fill = "darkgrey" ) +
+  xlim( 0, 500 ) +
+  theme_classic() +
+  labs( title = "Distribution of unfiltered reads" )
+
 ```
 
-#Plot a pcoa of filtered logCPM read counts
+##MDS plot visualizing mutliple factors
 
-```{r}
+```{r, message = FALSE}
 
 # Make a DGEList object for edgeR
 y <- DGEList( counts = data_input, remove.zeros = TRUE )
@@ -83,11 +120,6 @@ y <- calcNormFactors( y )
 
 # Calculate logCPM
 df_log <- cpm( y, log = TRUE, prior.count = 2 )
-
-# Plot MDS of filtered logCPM scores
-N <- plotMDS( df_log )
-
-# Hard to read right, right?
 
 # Export pcoa loadings
 dds.pcoa = pcoa( vegdist( t( df_log <- cpm( y, log = TRUE, prior.count = 2 ) ),
@@ -137,9 +169,11 @@ ordihull( logCPM.pca$x, targets$grouping,
 
 ```
 
-#DGE with interactive effect using edgeR
+#Interactive effects
 
-```{r}
+##Interactive effects: edgeR
+
+```{r, message = FALSE}
 
 # Fit multifactoria design matrix
 design_multi <- model.matrix( ~1 + pCO2 + pCO2:day ) #Generate multivariate edgeR glm
@@ -175,12 +209,15 @@ summary( is.de_int )
 
 plotMD( tr_int )
 
+# Check residuals
+edgeR_res <- residuals( multi_fit, type = "pearson" )
+head(edgeR_res)
+
 ```
 
-#DGE with interactive effect using Limma-voom
-https://ucdavis-bioinformatics-training.github.io/2018-June-RNA-Seq-Workshop/thursday/DE.html
+##Interactive effects: limma-voom
 
-```{r}
+```{r, message = FALSE}
 
 # Perform voom transformation
 voom <- voom( y, design_multi, plot = T )
@@ -211,10 +248,20 @@ length( which( pCO2_day_results$adj.P.Val < 0.05  ) ) # number of DE genes
 
 ```
 
-#Compare interaction p-values
+##Interactive effects: DESeq2
 
 ```{r}
 
+
+
+```
+
+
+##Comparing test statistics: interactive effects
+
+```{r, message = FALSE}
+
+# Merge logFC and pval data from each program
 voom_edgeR_int_comp <- merge( data.frame( geneid = row.names( pCO2_day_results ),
                                           voom_logFC = pCO2_day_results$logFC,
                                           voom_pval = pCO2_day_results$P.Value ),
@@ -235,7 +282,16 @@ ggplot( data = voom_edgeR_int_comp,
         aes( x = -log( voom_pval ), y = -log( edgeR_pval ) ) ) +
   geom_point( alpha = 0.1 ) +
   geom_smooth( method = "lm" ) +
-  theme_classic()
+  theme_classic() +
+  labs( title = "Interactions: edgeR vs. limma-voom p-values", 
+        x = "limma-voom pval",
+        y = "edgeR_pval" )
+
+```
+
+#Random Effects
+
+```{r}
 
 ```
 

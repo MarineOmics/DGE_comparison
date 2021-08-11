@@ -1,13 +1,178 @@
-DEG\_comparison
+DGE\_comparison
 ================
 Sam Bogan
 8/1/2021
 
 This markdown is a work in progress and walks through multifactorial modeling of gene expression using edgeR, DESeq2, limma-voom, EBSeq, and approaches for fitting models using customized code.
 
-# Load read count data, add metadata, plot initial PCA
+``` r
+# Load packages
+library( edgeR )
+```
+
+    ## Warning: package 'edgeR' was built under R version 3.6.2
+
+    ## Loading required package: limma
+
+    ## Warning: package 'limma' was built under R version 3.6.2
+
+``` r
+library( EBSeq )
+```
+
+    ## Loading required package: blockmodeling
+
+    ## Warning: package 'blockmodeling' was built under R version 3.6.2
+
+    ## To cite package 'blockmodeling' in publications please use package
+    ## citation and (at least) one of the articles:
+    ## 
+    ##   Žiberna, Aleš (2007). Generalized blockmodeling of valued networks.
+    ##   Social Networks 29(1), 105-126.
+    ## 
+    ##   Žiberna, Aleš (2008). Direct and indirect approaches to blockmodeling
+    ##   of valued networks in terms of regular equivalence. Journal of
+    ##   Mathematical Sociology 32(1), 57–84.
+    ## 
+    ##   Žiberna, Aleš (2014). Blockmodeling of multilevel networks. Social
+    ##   Networks 39, 46–61. https://doi.org/10.1016/j.socnet.2014.04.002.
+    ## 
+    ##   Žiberna, Aleš (2020).  Generalized and Classical Blockmodeling of
+    ##   Valued Networks, R package version 1.0.0.
+    ## 
+    ## To see these entries in BibTeX format, use 'print(<citation>,
+    ## bibtex=TRUE)', 'toBibtex(.)', or set
+    ## 'options(citation.bibtex.max=999)'.
+
+    ## Loading required package: gplots
+
+    ## Warning: package 'gplots' was built under R version 3.6.2
+
+    ## 
+    ## Attaching package: 'gplots'
+
+    ## The following object is masked from 'package:stats':
+    ## 
+    ##     lowess
+
+    ## Loading required package: testthat
+
+    ## Warning: package 'testthat' was built under R version 3.6.2
+
+``` r
+library( tidyverse )
+```
+
+    ## Warning: package 'tidyverse' was built under R version 3.6.2
+
+    ## ── Attaching packages ─────────────────────────────────────── tidyverse 1.3.1 ──
+
+    ## ✓ ggplot2 3.3.3     ✓ purrr   0.3.4
+    ## ✓ tibble  3.1.2     ✓ dplyr   1.0.6
+    ## ✓ tidyr   1.1.3     ✓ stringr 1.4.0
+    ## ✓ readr   1.4.0     ✓ forcats 0.5.1
+
+    ## Warning: package 'ggplot2' was built under R version 3.6.2
+
+    ## Warning: package 'tibble' was built under R version 3.6.2
+
+    ## Warning: package 'tidyr' was built under R version 3.6.2
+
+    ## Warning: package 'readr' was built under R version 3.6.2
+
+    ## Warning: package 'purrr' was built under R version 3.6.2
+
+    ## Warning: package 'dplyr' was built under R version 3.6.2
+
+    ## Warning: package 'forcats' was built under R version 3.6.2
+
+    ## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+    ## x dplyr::filter()  masks stats::filter()
+    ## x purrr::is_null() masks testthat::is_null()
+    ## x dplyr::lag()     masks stats::lag()
+    ## x dplyr::matches() masks tidyr::matches(), testthat::matches()
+    ## x dplyr::recode()  masks blockmodeling::recode()
+
+``` r
+library( ape )
+```
+
+    ## Warning: package 'ape' was built under R version 3.6.2
+
+``` r
+library( vegan )
+```
+
+    ## Warning: package 'vegan' was built under R version 3.6.2
+
+    ## Loading required package: permute
+
+    ## Loading required package: lattice
+
+    ## Warning: package 'lattice' was built under R version 3.6.2
+
+    ## This is vegan 2.5-7
 
 Read counts were produced by RSEM, mapped to a *de novo* transcriptome assembly for the Antarctic pteropod *Limacina helicina antarctica*.
+
+# Features of Popular DGE packages
+
+<table style="width:42%;">
+<colgroup>
+<col width="6%" />
+<col width="6%" />
+<col width="6%" />
+<col width="6%" />
+<col width="6%" />
+<col width="6%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">Program</th>
+<th align="left">Distribution</th>
+<th align="left">Dispersal</th>
+<th align="left">Random eff.</th>
+<th align="left">Continuous var.</th>
+<th align="left">Interactive eff.</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">EBSeq</td>
+<td align="left">Negative binomial</td>
+<td align="left">x</td>
+<td align="left">✖</td>
+<td align="left">✖</td>
+<td align="left">✖</td>
+</tr>
+<tr class="even">
+<td align="left">edgeR</td>
+<td align="left">Negative binomial</td>
+<td align="left">Avg., empirical Bayes, tagwise, and trended options</td>
+<td align="left">✔</td>
+<td align="left">✔</td>
+<td align="left">✔</td>
+</tr>
+<tr class="odd">
+<td align="left">DESeq2</td>
+<td align="left">Negative binomial</td>
+<td align="left">x</td>
+<td align="left">✔</td>
+<td align="left">✔</td>
+<td align="left">✔</td>
+</tr>
+<tr class="even">
+<td align="left">limma-voom</td>
+<td align="left">Mean-variance estimate</td>
+<td align="left">Empirical Bayes smooth</td>
+<td align="left">✔</td>
+<td align="left">✔</td>
+<td align="left">✔</td>
+</tr>
+</tbody>
+</table>
+
+# Filter and visualize read counts
 
 ``` r
 # Read in matrix of RSEM expected read counts
@@ -136,7 +301,7 @@ head( data_input )
     ## TR107626|c1_g1_i1  112215    86243   148100    74154
     ## TR11301|c0_g1_i1        0        0        0        0
 
-# Plot a pcoa of filtered logCPM read counts
+## MDS plot to visualizing mutliple factors
 
 ``` r
 # Make a DGEList object for edgeR
@@ -171,7 +336,7 @@ df_log <- cpm( y, log = TRUE, prior.count = 2 )
 N <- plotMDS( df_log )
 ```
 
-![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-2-1.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-3-1.png)
 
 ``` r
 # Hard to read right, right?
@@ -207,7 +372,7 @@ ordispider( scores,as.factor( targets$grouping ),label = F ) # Vectors connectin
 ordilabel( scores, cex = 0.5) # Label sample IDs
 ```
 
-![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-2-2.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-3-2.png)
 
 ``` r
 logCPM.pca <- prcomp( t ( df_log ) )
@@ -227,9 +392,9 @@ ordihull( logCPM.pca$x, targets$grouping,
           alpha = 75,cex = .5, label = T )
 ```
 
-![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-2-3.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-3-3.png)
 
-# DGE with interactive effect using edgeR
+## Interactive effects: edgeR
 
 ``` r
 # Fit multifactoria design matrix
@@ -253,7 +418,7 @@ y1 <- estimateDisp( y, robust = TRUE ) # Estimate mean dispersal
 plotBCV( y1 ) 
 ```
 
-![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-3-1.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-4-1.png)
 
 ``` r
 # Fit quasi-likelihood, neg binom linear regression
@@ -261,7 +426,7 @@ multi_fit <- glmQLFit( y1, design_multi ) # Fit multivariate model to counts
 plotQLDisp( multi_fit, col.shrunk = "red", col.raw = "black", col.trend = NULL )
 ```
 
-![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-3-2.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-4-2.png)
 
 ``` r
 # Test for effect of pCO2
@@ -281,7 +446,7 @@ summary( is.de_tr_pCO2 )
 plotMD( tr_pCO2 )
 ```
 
-![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-3-3.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-4-3.png)
 
 ``` r
 # Interaction
@@ -301,18 +466,16 @@ summary( is.de_int )
 plotMD( tr_int )
 ```
 
-![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-3-4.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-4-4.png)
 
-# DGE with interactive effect using Limma-voom
-
-<https://ucdavis-bioinformatics-training.github.io/2018-June-RNA-Seq-Workshop/thursday/DE.html>
+## Interactive effects: limma-voom
 
 ``` r
 # Perform voom transformation
 voom <- voom( y, design_multi, plot = T )
 ```
 
-![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-4-1.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-5-1.png)
 
 ``` r
 # Fit using voom
@@ -356,7 +519,9 @@ length( which( pCO2_day_results$adj.P.Val < 0.05  ) ) # number of DE genes
 
     ## [1] 1628
 
-# Compare interaction p-values
+## Interactive effects: limma-voom
+
+## Comparing test statistics: interactive effects
 
 ``` r
 voom_edgeR_int_comp <- merge( data.frame( geneid = row.names( pCO2_day_results ),
@@ -377,7 +542,7 @@ ggplot( data = voom_edgeR_int_comp,
 
     ## `geom_smooth()` using formula 'y ~ x'
 
-![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-5-1.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-6-1.png)
 
 ``` r
 # Correlation of logFC
@@ -390,4 +555,4 @@ ggplot( data = voom_edgeR_int_comp,
 
     ## `geom_smooth()` using formula 'y ~ x'
 
-![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-5-2.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-6-2.png)
