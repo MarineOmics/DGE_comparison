@@ -2,13 +2,15 @@
 title: "DGE_comparison"
 author: "Sam Bogan"
 date: "8/1/2021"
-output: 
-  html_document:
+output:
+  github_document:
     toc: true
     toc_depth: 3
 ---
 
-This markdown is a work in progress and walks through multifactorial modeling of gene expression using edgeR, DESeq2, limma-voom, EBSeq, and approaches for fitting models using customized code.
+#Intro to multifactorial RNA-seq models
+
+Studies of molecular responses to environmental change increasingly employ multifactorial experimental designs. Incorporating multiple developmental stages, stressors, or populations in RNA-seq experiments can better resolve interactions and autocorrelation among these variables, which can critically shape expression, physiology, and performance. However, downstream analyses resulting from mutlifactorial RNA-seq experiments rarely employ multifactorial models, deferring instead to pairwise contrasts of differential expression (DE). One reason many RNA-seq studies do not test for or report model results for predictors such as random effects, time series, or interactions, is that popular DE packages provide limited functionality for fitting multifactorial models. Here we will break down the strengths and limits of several DE packages as they apply to multifactorial study designs, guide users through the process of determining which packages are best suited to certain designs, and provide custom 'in-house' code for more flexibly fitting multifactorial models of gene expression. 
 
 ```{r setup, include = FALSE}
 
@@ -43,7 +45,7 @@ library( vegan )
 
 Read counts were produced by RSEM, mapped to a *de novo* transcriptome assembly for the Antarctic pteropod *Limacina helicina antarctica*.
 
-#Features of Popular DGE packages
+#Features of popular DGE packages
 | Program | Distribution | Dispersal | Random eff. | Continuous var. | Interactive eff. |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | EBSeq | Negative binomial | ? | ✖ | ✖ | ✖ |
@@ -94,16 +96,17 @@ head( data_input )
 # Plot distribution of unfiltered read counts across all samples 
 ggplot( data = data.frame( rowMeans( data_input ) ),
         aes( x = rowMeans.data_input. ) ) +
-  geom_density( fill = "darkgrey" ) +
+  geom_density( fill = "grey" ) +
   xlim( 0, 500 ) +
   theme_classic() +
-  labs( title = "Distribution of unfiltered reads" )
+  labs( title = "Distribution of unfiltered reads" ) +
+  labs( y = "Density", x = "Unfiltered read counts", title = "Read count distribution" )
 
 ```
 
 ##MDS plot visualizing mutliple factors
 
-```{r, message = FALSE}
+```{r, message = FALSE, warning = FALSE}
 
 # Make a DGEList object for edgeR
 y <- DGEList( counts = data_input, remove.zeros = TRUE )
@@ -173,7 +176,7 @@ ordihull( logCPM.pca$x, targets$grouping,
 
 ##Interactive effects: edgeR
 
-```{r, message = FALSE}
+```{r, message = FALSE, warning = FALSE}
 
 # Fit multifactoria design matrix
 design_multi <- model.matrix( ~1 + pCO2 + pCO2:day ) #Generate multivariate edgeR glm
@@ -217,7 +220,7 @@ head(edgeR_res)
 
 ##Interactive effects: limma-voom
 
-```{r, message = FALSE}
+```{r, message = FALSE, warning = FALSE}
 
 # Perform voom transformation
 voom <- voom( y, design_multi, plot = T )
@@ -250,7 +253,7 @@ length( which( pCO2_day_results$adj.P.Val < 0.05  ) ) # number of DE genes
 
 ##Interactive effects: DESeq2
 
-```{r}
+```{r, echo = FALSE}
 
 
 
@@ -259,7 +262,7 @@ length( which( pCO2_day_results$adj.P.Val < 0.05  ) ) # number of DE genes
 
 ##Comparing test statistics: interactive effects
 
-```{r, message = FALSE}
+```{r, message = FALSE, warning = FALSE}
 
 # Merge logFC and pval data from each program
 voom_edgeR_int_comp <- merge( data.frame( geneid = row.names( pCO2_day_results ),
@@ -273,25 +276,32 @@ voom_edgeR_int_comp <- merge( data.frame( geneid = row.names( pCO2_day_results )
 # Correlation of logFC
 ggplot( data = voom_edgeR_int_comp,
         aes( x = voom_logFC, y = edgeR_logFC ) ) +
-  geom_point( alpha = 0.1 ) +
-  geom_smooth( method = "lm" ) +
-  theme_classic()
+  geom_hex( bins = 100,
+            aes(fill = stat( log( count ) ) ) ) +
+  theme_classic() +
+  scale_fill_viridis_c() +
+  geom_smooth( method = "lm", color = "red", lty = 2 ) +
+  labs( title = "Interactions: edgeR vs. limma-voom p-values", 
+        x = "limma-voom logFC",
+        y = "edgeR logFC" )
 
 # Correlation of logFC
 ggplot( data = voom_edgeR_int_comp,
         aes( x = -log( voom_pval ), y = -log( edgeR_pval ) ) ) +
-  geom_point( alpha = 0.1 ) +
-  geom_smooth( method = "lm" ) +
+  geom_hex( bins = 100,
+            aes(fill = stat( log( count ) ) ) ) +
   theme_classic() +
+  scale_fill_viridis_c() +
+  geom_smooth( method = "lm", color = "red", lty = 2 ) +
   labs( title = "Interactions: edgeR vs. limma-voom p-values", 
         x = "limma-voom pval",
-        y = "edgeR_pval" )
+        y = "edgeR pval" )
 
 ```
 
 #Random Effects
 
-```{r}
+```{r, echo = FALSE}
 
 ```
 
