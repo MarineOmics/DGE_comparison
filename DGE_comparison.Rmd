@@ -2,10 +2,7 @@
 title: "DGE_comparison"
 author: "Sam Bogan"
 date: "8/1/2021"
-output:
-  github_document:
-    toc: true
-    toc_depth: 3
+output: github_document
 ---
 
 #Intro to multifactorial RNA-seq models

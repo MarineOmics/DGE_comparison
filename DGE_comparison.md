@@ -3,119 +3,23 @@ DGE\_comparison
 Sam Bogan
 8/1/2021
 
-This markdown is a work in progress and walks through multifactorial modeling of gene expression using edgeR, DESeq2, limma-voom, EBSeq, and approaches for fitting models using customized code.
+# Intro to multifactorial RNA-seq models
+
+Studies of molecular responses to environmental change increasingly employ multifactorial experimental designs. Incorporating multiple developmental stages, stressors, or populations in RNA-seq experiments can better resolve interactions and autocorrelation among these variables, which can critically shape expression, physiology, and performance. However, downstream analyses resulting from mutlifactorial RNA-seq experiments rarely employ multifactorial models, deferring instead to pairwise contrasts of differential expression (DE). One reason many RNA-seq studies do not test for or report model results for predictors such as random effects, time series, or interactions, is that popular DE packages provide limited functionality for fitting multifactorial models. Here we will break down the strengths and limits of several DE packages as they apply to multifactorial study designs, guide users through the process of determining which packages are best suited to certain designs, and provide custom 'in-house' code for more flexibly fitting multifactorial models of gene expression.
 
 ``` r
 # Load packages
+library( DESeq2 )
 library( edgeR )
-```
-
-    ## Warning: package 'edgeR' was built under R version 3.6.2
-
-    ## Loading required package: limma
-
-    ## Warning: package 'limma' was built under R version 3.6.2
-
-``` r
 library( EBSeq )
-```
-
-    ## Loading required package: blockmodeling
-
-    ## Warning: package 'blockmodeling' was built under R version 3.6.2
-
-    ## To cite package 'blockmodeling' in publications please use package
-    ## citation and (at least) one of the articles:
-    ## 
-    ##   Žiberna, Aleš (2007). Generalized blockmodeling of valued networks.
-    ##   Social Networks 29(1), 105-126.
-    ## 
-    ##   Žiberna, Aleš (2008). Direct and indirect approaches to blockmodeling
-    ##   of valued networks in terms of regular equivalence. Journal of
-    ##   Mathematical Sociology 32(1), 57–84.
-    ## 
-    ##   Žiberna, Aleš (2014). Blockmodeling of multilevel networks. Social
-    ##   Networks 39, 46–61. https://doi.org/10.1016/j.socnet.2014.04.002.
-    ## 
-    ##   Žiberna, Aleš (2020).  Generalized and Classical Blockmodeling of
-    ##   Valued Networks, R package version 1.0.0.
-    ## 
-    ## To see these entries in BibTeX format, use 'print(<citation>,
-    ## bibtex=TRUE)', 'toBibtex(.)', or set
-    ## 'options(citation.bibtex.max=999)'.
-
-    ## Loading required package: gplots
-
-    ## Warning: package 'gplots' was built under R version 3.6.2
-
-    ## 
-    ## Attaching package: 'gplots'
-
-    ## The following object is masked from 'package:stats':
-    ## 
-    ##     lowess
-
-    ## Loading required package: testthat
-
-    ## Warning: package 'testthat' was built under R version 3.6.2
-
-``` r
 library( tidyverse )
-```
-
-    ## Warning: package 'tidyverse' was built under R version 3.6.2
-
-    ## ── Attaching packages ─────────────────────────────────────── tidyverse 1.3.1 ──
-
-    ## ✓ ggplot2 3.3.3     ✓ purrr   0.3.4
-    ## ✓ tibble  3.1.2     ✓ dplyr   1.0.6
-    ## ✓ tidyr   1.1.3     ✓ stringr 1.4.0
-    ## ✓ readr   1.4.0     ✓ forcats 0.5.1
-
-    ## Warning: package 'ggplot2' was built under R version 3.6.2
-
-    ## Warning: package 'tibble' was built under R version 3.6.2
-
-    ## Warning: package 'tidyr' was built under R version 3.6.2
-
-    ## Warning: package 'readr' was built under R version 3.6.2
-
-    ## Warning: package 'purrr' was built under R version 3.6.2
-
-    ## Warning: package 'dplyr' was built under R version 3.6.2
-
-    ## Warning: package 'forcats' was built under R version 3.6.2
-
-    ## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
-    ## x dplyr::filter()  masks stats::filter()
-    ## x purrr::is_null() masks testthat::is_null()
-    ## x dplyr::lag()     masks stats::lag()
-    ## x dplyr::matches() masks tidyr::matches(), testthat::matches()
-    ## x dplyr::recode()  masks blockmodeling::recode()
-
-``` r
 library( ape )
-```
-
-    ## Warning: package 'ape' was built under R version 3.6.2
-
-``` r
 library( vegan )
 ```
 
-    ## Warning: package 'vegan' was built under R version 3.6.2
-
-    ## Loading required package: permute
-
-    ## Loading required package: lattice
-
-    ## Warning: package 'lattice' was built under R version 3.6.2
-
-    ## This is vegan 2.5-7
-
 Read counts were produced by RSEM, mapped to a *de novo* transcriptome assembly for the Antarctic pteropod *Limacina helicina antarctica*.
 
-# Features of Popular DGE packages
+# Features of popular DGE packages
 
 <table style="width:42%;">
 <colgroup>
@@ -140,7 +44,7 @@ Read counts were produced by RSEM, mapped to a *de novo* transcriptome assembly 
 <tr class="odd">
 <td align="left">EBSeq</td>
 <td align="left">Negative binomial</td>
-<td align="left">x</td>
+<td align="left">?</td>
 <td align="left">✖</td>
 <td align="left">✖</td>
 <td align="left">✖</td>
@@ -148,7 +52,7 @@ Read counts were produced by RSEM, mapped to a *de novo* transcriptome assembly 
 <tr class="even">
 <td align="left">edgeR</td>
 <td align="left">Negative binomial</td>
-<td align="left">Avg., empirical Bayes, tagwise, and trended options</td>
+<td align="left">Avg., trended, tagwise, and Bayesian shrinkage options</td>
 <td align="left">✔</td>
 <td align="left">✔</td>
 <td align="left">✔</td>
@@ -156,7 +60,7 @@ Read counts were produced by RSEM, mapped to a *de novo* transcriptome assembly 
 <tr class="odd">
 <td align="left">DESeq2</td>
 <td align="left">Negative binomial</td>
-<td align="left">x</td>
+<td align="left">Avg., trended, tagwise, and shrinkage options,</td>
 <td align="left">✔</td>
 <td align="left">✔</td>
 <td align="left">✔</td>
@@ -247,7 +151,7 @@ day <- as.numeric( c( 7, 7, 7, .5, .5, .5,
 targets <- data.frame( pCO2, day, treatment )
 targets$grouping <- paste( targets$pCO2, targets$day, sep = "." )
 
-Group <- factor( paste( targets$day, targets$pCO2, sep="_" ) )
+Group <- factor( paste( targets$day, targets$pCO2, sep = "_" ) )
 cbind( targets, Group = Group )
 ```
 
@@ -301,18 +205,25 @@ head( data_input )
     ## TR107626|c1_g1_i1  112215    86243   148100    74154
     ## TR11301|c0_g1_i1        0        0        0        0
 
-## MDS plot to visualizing mutliple factors
+``` r
+# Plot distribution of unfiltered read counts across all samples 
+ggplot( data = data.frame( rowMeans( data_input ) ),
+        aes( x = rowMeans.data_input. ) ) +
+  geom_density( fill = "grey" ) +
+  xlim( 0, 500 ) +
+  theme_classic() +
+  labs( title = "Distribution of unfiltered reads" ) +
+  labs( y = "Density", x = "Unfiltered read counts", title = "Read count distribution" )
+```
+
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-2-1.png)
+
+## MDS plot visualizing mutliple factors
 
 ``` r
 # Make a DGEList object for edgeR
 y <- DGEList( counts = data_input, remove.zeros = TRUE )
-```
 
-    ## Repeated column names found in count matrix
-
-    ## Removing 1761 rows with all zero counts
-
-``` r
 #Let's remove samples with less then 0.5 cpm (this is ~10 counts in the count file) in fewer then 9/12 samples
 keep <- rowSums( cpm( y ) > .5 ) >= 9
 
@@ -331,15 +242,6 @@ y <- calcNormFactors( y )
 
 # Calculate logCPM
 df_log <- cpm( y, log = TRUE, prior.count = 2 )
-
-# Plot MDS of filtered logCPM scores
-N <- plotMDS( df_log )
-```
-
-![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-3-1.png)
-
-``` r
-# Hard to read right, right?
 
 # Export pcoa loadings
 dds.pcoa = pcoa( vegdist( t( df_log <- cpm( y, log = TRUE, prior.count = 2 ) ),
@@ -372,7 +274,7 @@ ordispider( scores,as.factor( targets$grouping ),label = F ) # Vectors connectin
 ordilabel( scores, cex = 0.5) # Label sample IDs
 ```
 
-![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-3-2.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-3-1.png)
 
 ``` r
 logCPM.pca <- prcomp( t ( df_log ) )
@@ -392,7 +294,9 @@ ordihull( logCPM.pca$x, targets$grouping,
           alpha = 75,cex = .5, label = T )
 ```
 
-![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-3-3.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-3-2.png)
+
+# Interactive effects
 
 ## Interactive effects: edgeR
 
@@ -468,6 +372,14 @@ plotMD( tr_int )
 
 ![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-4-4.png)
 
+``` r
+# Check residuals
+edgeR_res <- residuals( multi_fit, type = "pearson" )
+head(edgeR_res)
+```
+
+    ## NULL
+
 ## Interactive effects: limma-voom
 
 ``` r
@@ -519,11 +431,12 @@ length( which( pCO2_day_results$adj.P.Val < 0.05  ) ) # number of DE genes
 
     ## [1] 1628
 
-## Interactive effects: limma-voom
+## Interactive effects: DESeq2
 
 ## Comparing test statistics: interactive effects
 
 ``` r
+# Merge logFC and pval data from each program
 voom_edgeR_int_comp <- merge( data.frame( geneid = row.names( pCO2_day_results ),
                                           voom_logFC = pCO2_day_results$logFC,
                                           voom_pval = pCO2_day_results$P.Value ),
@@ -535,24 +448,32 @@ voom_edgeR_int_comp <- merge( data.frame( geneid = row.names( pCO2_day_results )
 # Correlation of logFC
 ggplot( data = voom_edgeR_int_comp,
         aes( x = voom_logFC, y = edgeR_logFC ) ) +
-  geom_point( alpha = 0.1 ) +
-  geom_smooth( method = "lm" ) +
-  theme_classic()
+  geom_hex( bins = 100,
+            aes(fill = stat( log( count ) ) ) ) +
+  theme_classic() +
+  scale_fill_viridis_c() +
+  geom_smooth( method = "lm", color = "red", lty = 2 ) +
+  labs( title = "Interactions: edgeR vs. limma-voom p-values", 
+        x = "limma-voom logFC",
+        y = "edgeR logFC" )
 ```
 
-    ## `geom_smooth()` using formula 'y ~ x'
-
-![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-6-1.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-7-1.png)
 
 ``` r
 # Correlation of logFC
 ggplot( data = voom_edgeR_int_comp,
         aes( x = -log( voom_pval ), y = -log( edgeR_pval ) ) ) +
-  geom_point( alpha = 0.1 ) +
-  geom_smooth( method = "lm" ) +
-  theme_classic()
+  geom_hex( bins = 100,
+            aes(fill = stat( log( count ) ) ) ) +
+  theme_classic() +
+  scale_fill_viridis_c() +
+  geom_smooth( method = "lm", color = "red", lty = 2 ) +
+  labs( title = "Interactions: edgeR vs. limma-voom p-values", 
+        x = "limma-voom pval",
+        y = "edgeR pval" )
 ```
 
-    ## `geom_smooth()` using formula 'y ~ x'
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-7-2.png)
 
-![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-6-2.png)
+# Random Effects
