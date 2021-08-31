@@ -2,7 +2,10 @@
 title: "DGE_comparison"
 author: "Sam Bogan"
 date: "8/1/2021"
-output: github_document
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
 ---
 
 #Intro to multifactorial RNA-seq models
@@ -278,7 +281,7 @@ ggplot( data = voom_edgeR_int_comp,
   theme_classic() +
   scale_fill_viridis_c() +
   geom_smooth( method = "lm", color = "red", lty = 2 ) +
-  labs( title = "Interactions: edgeR vs. limma-voom p-values", 
+  labs( title = "Interactions: edgeR vs. limma-voom logFC's", 
         x = "limma-voom logFC",
         y = "edgeR logFC" )
 
