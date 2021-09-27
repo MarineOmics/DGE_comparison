@@ -10,7 +10,7 @@ output:
 
 #Intro to multifactorial RNA-seq models
 
-Studies of molecular responses to environmental change increasingly employ multifactorial experimental designs. Incorporating multiple developmental stages, stressors, or populations in RNA-seq experiments can better resolve interactions and autocorrelation among these variables, which can critically shape expression, physiology, and performance. However, downstream analyses resulting from mutlifactorial RNA-seq experiments rarely employ multifactorial models, deferring instead to pairwise contrasts of differential expression (DE). One reason many RNA-seq studies do not test for or report model results for predictors such as random effects, time series, or interactions, is that popular DE packages provide limited functionality for fitting multifactorial models. Here we will break down the strengths and limits of several DE packages as they apply to multifactorial study designs, guide users through the process of determining which packages are best suited to certain designs, and provide custom 'in-house' code for more flexibly fitting multifactorial models of gene expression. 
+    Studies of molecular responses to environmental change increasingly employ multifactorial experimental designs. Incorporating multiple developmental stages, stressors, or populations in RNA-seq experiments can better resolve interactions and autocorrelation among these variables, which can critically shape expression, physiology, and performance. However, downstream analyses resulting from mutlifactorial RNA-seq experiments rarely employ multifactorial models, deferring instead to pairwise contrasts of differential expression (DE). One reason many RNA-seq studies do not test for or report model results for predictors such as random effects, time series, or interactions, is that popular DE packages provide limited functionality for fitting multifactorial models. Here we will break down the strengths and limits of several DE packages as they apply to multifactorial study designs, guide users through the process of determining which packages are best suited to certain designs, and provide custom 'in-house' code for more flexibly fitting multifactorial models of gene expression. 
 
 ```{r setup, include = FALSE}
 
@@ -40,6 +40,11 @@ library( EBSeq )
 library( tidyverse )
 library( ape )
 library( vegan )
+library( GGally )
+library( arrayQualityMetrics )
+library( rgl )
+library( dplyr )
+library( adegenet )
 
 ```
 
@@ -214,7 +219,7 @@ plotMD( tr_int )
 
 # Check residuals
 edgeR_res <- residuals( multi_fit, type = "pearson" )
-head(edgeR_res)
+head( edgeR_res )
 
 ```
 
@@ -253,9 +258,47 @@ length( which( pCO2_day_results$adj.P.Val < 0.05  ) ) # number of DE genes
 
 ##Interactive effects: DESeq2
 
+In this current draft, it appears that fitting the interaction term ~ pCO2:day ONLY, rather than adding pCO2 + day + ..., results in the strongest correlations with voom and edgeR interaction stats. I am currently figuring out why this is.
+
+As such, the DESeq2 code below only fits the interaction term to the read count data.
+
 ```{r, echo = FALSE}
 
+gcounts <- as.data.frame( data_input )
 
+totalCounts <- colSums( gcounts )
+
+### REMOVE GENES WITH LOW MEAN COUNTS ###
+
+# Make a DGEList object for edgeR
+y <- DGEList( counts = data_input, remove.zeros = TRUE )
+
+# Let's remove samples with less then 0.5 cpm (this is ~10 counts in the count file) in fewer then 9/12 samples
+keep_g <- rowSums( cpm( gcounts ) > .5 ) >= 9
+
+table( keep_g )
+
+# Set keep.lib.sizes = F and recalculate library sizes after filtering
+#gcounts <- gcounts[ keep_g, keep.lib.sizes = FALSE ]
+
+### BUILD A DATAFRAME ASSOCIATING SAMPLE NAMESWITH TREATMENT CONDITIONS ###
+targets
+
+### WALD TEST - FULL MODEL ###
+
+dds <- DESeqDataSetFromMatrix( gcounts,
+                               colData = targets,
+                               design = formula( ~ pCO2 + day + pCO2:day ) )
+
+rld <- rlog( dds )
+rld.df <- assay( rld )
+
+# Wald test for pCO2:day
+dds_int <- DESeq( dds, minReplicatesForReplace = Inf )
+
+design <- design( dds_int )
+
+DESeq2_int_results <- filter( resultsNames( dds_int ), baseMean > 0 )
 
 ```
 
@@ -265,16 +308,48 @@ length( which( pCO2_day_results$adj.P.Val < 0.05  ) ) # number of DE genes
 ```{r, message = FALSE, warning = FALSE}
 
 # Merge logFC and pval data from each program
-voom_edgeR_int_comp <- merge( data.frame( geneid = row.names( pCO2_day_results ),
-                                          voom_logFC = pCO2_day_results$logFC,
-                                          voom_pval = pCO2_day_results$P.Value ),
-                              data.frame( geneid = row.names( tr_int$table ),
-                                          edgeR_logFC = tr_int$table$logFC,
-                                          edgeR_pval = tr_int$table$PValue ),
-                              by = "geneid" )
+voom_edgeR_deseq_int_comp <- merge( 
+  merge(
+    data.frame( geneid = row.names( pCO2_day_results ),
+                voom_logFC = pCO2_day_results$logFC,
+                voom_pval = pCO2_day_results$P.Value ),
+    data.frame( geneid = row.names( tr_int$table ),
+                edgeR_logFC = tr_int$table$logFC,
+                edgeR_pval = tr_int$table$PValue ),
+    by = "geneid" ),
+  data.frame( geneid = DESeq2_int_results$row,
+              DESeq2_logFC = DESeq2_int_results$log2FoldChange,
+              DESeq2_pval = DESeq2_int_results$pvalue ),
+  by = "geneid" )
+
+# Create neg log pvalues
+voom_edgeR_deseq_int_comp$voom_neglogp <- -log( voom_edgeR_deseq_int_comp$voom_pval )
+voom_edgeR_deseq_int_comp$edgeR_neglogp <- -log( voom_edgeR_deseq_int_comp$edgeR_pval )
+voom_edgeR_deseq_int_comp$DESeq2_neglogp <- -log( voom_edgeR_deseq_int_comp$DESeq2_pval )
+
+# Correlation matrix of pvalues
+pval_pairs <- ggpairs( data = voom_edgeR_deseq_int_comp,
+                       columns = c( 8, 9, 10 ),
+                       mapping = aes( alpha = 0.001 ) ) +
+  labs( title = "Correlation matrix: interaction p-values" )
+
+pval_pairs
+
+# Create neg log pvalues
+voom_edgeR_deseq_int_comp$voom_neglogp <- -log( voom_edgeR_deseq_int_comp$voom_pval )
+voom_edgeR_deseq_int_comp$edgeR_neglogp <- -log( voom_edgeR_deseq_int_comp$edgeR_pval )
+voom_edgeR_deseq_int_comp$DESeq2_neglogp <- -log( voom_edgeR_deseq_int_comp$DESeq2_pval )
+
+# Correlation matrix of logFC's
+logFC_pairs <- ggpairs( data = voom_edgeR_deseq_int_comp,
+                       columns = c( 2, 4, 6 ),
+                       mapping = aes( alpha = 0.001 ) ) +
+  labs( title = "Correlation matrix: interaction logFC's" )
+
+logFC_pairs
 
 # Correlation of logFC
-ggplot( data = voom_edgeR_int_comp,
+ggplot( data = voom_edgeR_deseq_int_comp,
         aes( x = voom_logFC, y = edgeR_logFC ) ) +
   geom_hex( bins = 100,
             aes(fill = stat( log( count ) ) ) ) +
@@ -285,8 +360,8 @@ ggplot( data = voom_edgeR_int_comp,
         x = "limma-voom logFC",
         y = "edgeR logFC" )
 
-# Correlation of logFC
-ggplot( data = voom_edgeR_int_comp,
+# Correlations between pvals
+ggplot( data = voom_edgeR_deseq_int_comp,
         aes( x = -log( voom_pval ), y = -log( edgeR_pval ) ) ) +
   geom_hex( bins = 100,
             aes(fill = stat( log( count ) ) ) ) +
@@ -297,11 +372,38 @@ ggplot( data = voom_edgeR_int_comp,
         x = "limma-voom pval",
         y = "edgeR pval" )
 
+# Correlation of logFC: edgeR vs DESeq2 
+ggplot( data = voom_edgeR_deseq_int_comp,
+        aes( x = DESeq2_logFC, y = edgeR_logFC ) ) +
+  geom_hex( bins = 100,
+            aes(fill = stat( log( count ) ) ) ) +
+  theme_classic() +
+  scale_fill_viridis_c() +
+  geom_smooth( method = "lm", color = "red", lty = 2 ) +
+  labs( title = "Interactions: edgeR vs. DESeq2 logFC's", 
+        x = "DESeq2 logFC",
+        y = "edgeR logFC" )
+
+# Correlation of logFC: edgeR vs DESeq2 
+ggplot( data = voom_edgeR_deseq_int_comp,
+        aes( x = -log( DESeq2_pval ), y = -log( edgeR_pval ) ) ) +
+  geom_hex( bins = 100,
+            aes(fill = stat( log( count ) ) ) ) +
+  xlim( values = c( 0, 20 ) ) +
+  theme_classic() +
+  scale_fill_viridis_c() +
+  geom_smooth( method = "lm", color = "red", lty = 2 ) +
+  labs( title = "Interactions: edgeR vs. DESeq2 p-values", 
+        x = "DESeq2 logFC",
+        y = "edgeR logFC" )
+
 ```
 
 #Random Effects
 
 ```{r, echo = FALSE}
+
+
 
 ```
 
