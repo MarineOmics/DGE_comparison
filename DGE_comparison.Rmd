@@ -288,7 +288,7 @@ targets
 
 dds <- DESeqDataSetFromMatrix( gcounts,
                                colData = targets,
-                               design = formula( ~ pCO2 + day + pCO2:day ) )
+                               design = formula( ~ pCO2 + day + pCO2 : day ) )
 
 rld <- rlog( dds )
 rld.df <- assay( rld )
@@ -298,7 +298,9 @@ dds_int <- DESeq( dds, minReplicatesForReplace = Inf )
 
 design <- design( dds_int )
 
-DESeq2_int_results <- filter( resultsNames( dds_int ), baseMean > 0 )
+DESeq2_int_result_names <- resultsNames( dds_int )
+
+DESeq2_int_results <- results( dds_int, name = "pCO2.day" )
 
 ```
 
@@ -317,7 +319,7 @@ voom_edgeR_deseq_int_comp <- merge(
                 edgeR_logFC = tr_int$table$logFC,
                 edgeR_pval = tr_int$table$PValue ),
     by = "geneid" ),
-  data.frame( geneid = DESeq2_int_results$row,
+  data.frame( geneid = row.names( DESeq2_int_results ),
               DESeq2_logFC = DESeq2_int_results$log2FoldChange,
               DESeq2_pval = DESeq2_int_results$pvalue ),
   by = "geneid" )
