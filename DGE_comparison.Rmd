@@ -209,7 +209,7 @@ summary( is.de_tr_pCO2 )
 plotMD( tr_pCO2 )
 
 # Interaction
-tr_int <- glmQLFTest( multi_fit, coef = 3, poisson.bound = FALSE ) # Estimate significant DEGs
+tr_int <- glmQLFTest( multi_fit, coef = 2, poisson.bound = FALSE ) # Estimate significant DEGs
 
 is.de_int <- decideTestsDGE( tr_int, adjust.method = "fdr", p.value = 0.05 ) # Make contrasts
 
@@ -288,7 +288,7 @@ targets
 
 dds <- DESeqDataSetFromMatrix( gcounts,
                                colData = targets,
-                               design = formula( ~ pCO2 + day + pCO2 : day ) )
+                               design = formula( ~ pCO2 + pCO2 : day ) )
 
 rld <- rlog( dds )
 rld.df <- assay( rld )
@@ -303,7 +303,6 @@ DESeq2_int_result_names <- resultsNames( dds_int )
 DESeq2_int_results <- results( dds_int, name = "pCO2.day" )
 
 ```
-
 
 ##Comparing test statistics: interactive effects
 
@@ -401,11 +400,54 @@ ggplot( data = voom_edgeR_deseq_int_comp,
 
 ```
 
-#Random Effects
+#Random Effects: edgeR (doesn't fit random effects)
 
-```{r, echo = FALSE}
+```{r}
 
+# Fit multifactoria design matrix
+design_rand <- model.matrix( ~1 + pCO2 + ( 1 | day ) ) #Generate multivariate edgeR glm
 
+# Perform voom transformation
+voom_rand <- voom( y, design_rand, plot = T )
+
+# Fit using voom
+lm_voom_fit_rand <- lmFit( voom_rand, design_rand )
+
+# Create a contrast across continuous pCO2 variable
+cont_rand_day <- contrasts.fit( lm_voom_fit_rand, coef = "pCO2" )
+
+# Perform empirical Bayes smoothing of standard errors
+lm_voom_fit_rand <- eBayes( lm_voom_fit_rand )
+
+# Output test statistics
+rand_results <- topTable( lm_voom_fit_rand, coef = "pCO2", adjust.method = "fdr", n = Inf )
+
+# How many DEG are associated with pCO2 and pCO2:day?
+length( which( rand_results$adj.P.Val < 0.05 & abs( rand_results$logFC ) > ( 4 / 600 ) ) ) # number of DE genes = 7091
+length( which( rand_results$adj.P.Val < 0.05  ) ) # number of DE genes
+rand_results
+length( which( rand_results$adj.P.Val < 0.05 & 
+                 abs( rand_results$logFC ) > ( 4 / 600 ) ) ) # number of DE genes = 7091
+length( which( rand_results$adj.P.Val < 0.05  ) ) # number of DE genes
+
+```
+
+```{r}
+
+# Merge logFC and pval data from each program
+voom_edgeR_deseq_int_comp <- merge( 
+  merge(
+    data.frame( geneid = row.names( pCO2_day_results ),
+                voom_logFC = pCO2_day_results$logFC,
+                voom_pval = pCO2_day_results$P.Value ),
+    data.frame( geneid = row.names( tr_int$table ),
+                edgeR_logFC = tr_int$table$logFC,
+                edgeR_pval = tr_int$table$PValue ),
+    by = "geneid" ),
+  data.frame( geneid = row.names( DESeq2_int_results ),
+              DESeq2_logFC = DESeq2_int_results$log2FoldChange,
+              DESeq2_pval = DESeq2_int_results$pvalue ),
+  by = "geneid" )
 
 ```
 
