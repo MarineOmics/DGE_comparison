@@ -3,6 +3,7 @@ title: "DGE_comparison"
 author: "Sam Bogan"
 date: "8/1/2021"
 output:
+  github_document: default
   html_document:
     toc: true
     toc_depth: 3
@@ -288,7 +289,7 @@ targets
 
 dds <- DESeqDataSetFromMatrix( gcounts,
                                colData = targets,
-                               design = formula( ~ pCO2 + pCO2 : day ) )
+                               design = formula( ~ 1 + pCO2 + day : pCO2 ) )
 
 rld <- rlog( dds )
 rld.df <- assay( rld )
@@ -315,8 +316,8 @@ voom_edgeR_deseq_int_comp <- merge(
                 voom_logFC = pCO2_day_results$logFC,
                 voom_pval = pCO2_day_results$P.Value ),
     data.frame( geneid = row.names( tr_int$table ),
-                edgeR_logFC = tr_int$table$logFC,
-                edgeR_pval = tr_int$table$PValue ),
+                edgeR_logFC = -( tr_int$table$logFC ), #negate logFC because of syntax differences
+                edgeR_pval = tr_int$table$PValue ), 
     by = "geneid" ),
   data.frame( geneid = row.names( DESeq2_int_results ),
               DESeq2_logFC = DESeq2_int_results$log2FoldChange,
@@ -400,7 +401,9 @@ ggplot( data = voom_edgeR_deseq_int_comp,
 
 ```
 
-#Random Effects: edgeR (doesn't fit random effects)
+#Random Effects: voom 
+
+We will skip edgeR and DESeq2 since they cannot fit random effects
 
 ```{r}
 
@@ -425,29 +428,14 @@ rand_results <- topTable( lm_voom_fit_rand, coef = "pCO2", adjust.method = "fdr"
 # How many DEG are associated with pCO2 and pCO2:day?
 length( which( rand_results$adj.P.Val < 0.05 & abs( rand_results$logFC ) > ( 4 / 600 ) ) ) # number of DE genes = 7091
 length( which( rand_results$adj.P.Val < 0.05  ) ) # number of DE genes
-rand_results
+
 length( which( rand_results$adj.P.Val < 0.05 & 
                  abs( rand_results$logFC ) > ( 4 / 600 ) ) ) # number of DE genes = 7091
 length( which( rand_results$adj.P.Val < 0.05  ) ) # number of DE genes
 
 ```
 
-```{r}
+Random slopes: to our knowledge, no DESeq package permits the fitting of random slopes
 
-# Merge logFC and pval data from each program
-voom_edgeR_deseq_int_comp <- merge( 
-  merge(
-    data.frame( geneid = row.names( pCO2_day_results ),
-                voom_logFC = pCO2_day_results$logFC,
-                voom_pval = pCO2_day_results$P.Value ),
-    data.frame( geneid = row.names( tr_int$table ),
-                edgeR_logFC = tr_int$table$logFC,
-                edgeR_pval = tr_int$table$PValue ),
-    by = "geneid" ),
-  data.frame( geneid = row.names( DESeq2_int_results ),
-              DESeq2_logFC = DESeq2_int_results$log2FoldChange,
-              DESeq2_pval = DESeq2_int_results$pvalue ),
-  by = "geneid" )
-
-```
+What we want to test whether the effect of *p*CO$_{2}$ on expression varies by time, treating time as a random effect with different intercepts but a \beta parameter?
 

@@ -5,7 +5,7 @@ Sam Bogan
 
 # Intro to multifactorial RNA-seq models
 
-Studies of molecular responses to environmental change increasingly employ multifactorial experimental designs. Incorporating multiple developmental stages, stressors, or populations in RNA-seq experiments can better resolve interactions and autocorrelation among these variables, which can critically shape expression, physiology, and performance. However, downstream analyses resulting from mutlifactorial RNA-seq experiments rarely employ multifactorial models, deferring instead to pairwise contrasts of differential expression (DE). One reason many RNA-seq studies do not test for or report model results for predictors such as random effects, time series, or interactions, is that popular DE packages provide limited functionality for fitting multifactorial models. Here we will break down the strengths and limits of several DE packages as they apply to multifactorial study designs, guide users through the process of determining which packages are best suited to certain designs, and provide custom 'in-house' code for more flexibly fitting multifactorial models of gene expression.
+    Studies of molecular responses to environmental change increasingly employ multifactorial experimental designs. Incorporating multiple developmental stages, stressors, or populations in RNA-seq experiments can better resolve interactions and autocorrelation among these variables, which can critically shape expression, physiology, and performance. However, downstream analyses resulting from mutlifactorial RNA-seq experiments rarely employ multifactorial models, deferring instead to pairwise contrasts of differential expression (DE). One reason many RNA-seq studies do not test for or report model results for predictors such as random effects, time series, or interactions, is that popular DE packages provide limited functionality for fitting multifactorial models. Here we will break down the strengths and limits of several DE packages as they apply to multifactorial study designs, guide users through the process of determining which packages are best suited to certain designs, and provide custom 'in-house' code for more flexibly fitting multifactorial models of gene expression. 
 
 ``` r
 # Load packages
@@ -15,6 +15,11 @@ library( EBSeq )
 library( tidyverse )
 library( ape )
 library( vegan )
+library( GGally )
+library( arrayQualityMetrics )
+library( rgl )
+library( dplyr )
+library( adegenet )
 ```
 
 Read counts were produced by RSEM, mapped to a *de novo* transcriptome assembly for the Antarctic pteropod *Limacina helicina antarctica*.
@@ -348,34 +353,30 @@ summary( is.de_tr_pCO2 )
 
 ``` r
 plotMD( tr_pCO2 )
-```
 
-![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-4-3.png)
-
-``` r
 # Interaction
-tr_int <- glmQLFTest( multi_fit, coef = 3, poisson.bound = FALSE ) # Estimate significant DEGs
+tr_int <- glmQLFTest( multi_fit, coef = 2, poisson.bound = FALSE ) # Estimate significant DEGs
 
 is.de_int <- decideTestsDGE( tr_int, adjust.method = "fdr", p.value = 0.05 ) # Make contrasts
 
 summary( is.de_int )
 ```
 
-    ##        pCO2:day
-    ## Down       1021
-    ## NotSig    60821
-    ## Up          737
+    ##         pCO2
+    ## Down       0
+    ## NotSig 62579
+    ## Up         0
 
 ``` r
 plotMD( tr_int )
 ```
 
-![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-4-4.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-4-3.png)
 
 ``` r
 # Check residuals
 edgeR_res <- residuals( multi_fit, type = "pearson" )
-head(edgeR_res)
+head( edgeR_res )
 ```
 
     ## NULL
@@ -433,36 +434,132 @@ length( which( pCO2_day_results$adj.P.Val < 0.05  ) ) # number of DE genes
 
 ## Interactive effects: DESeq2
 
+In this current draft, it appears that fitting the interaction term ~ pCO2:day ONLY, rather than adding pCO2 + day + ..., results in the strongest correlations with voom and edgeR interaction stats. I am currently figuring out why this is.
+
+As such, the DESeq2 code below only fits the interaction term to the read count data.
+
+    ## Repeated column names found in count matrix
+
+    ## Removing 1761 rows with all zero counts
+
+    ## keep_g
+    ## FALSE  TRUE 
+    ## 20632 62579
+
+    ##    pCO2 day treatment grouping
+    ## 1   255 7.0         B    255.7
+    ## 2   255 7.0         B    255.7
+    ## 3   255 7.0         B    255.7
+    ## 4   255 0.5         B  255.0.5
+    ## 5   255 0.5         B  255.0.5
+    ## 6   255 0.5         B  255.0.5
+    ## 7   530 7.0         R    530.7
+    ## 8   530 7.0         R    530.7
+    ## 9   530 7.0         R    530.7
+    ## 10  530 0.5         R  530.0.5
+    ## 11  530 0.5         R  530.0.5
+    ## 12  530 0.5         R  530.0.5
+    ## 13  918 7.0         Y    918.7
+    ## 14  918 7.0         Y    918.7
+    ## 15  918 7.0         Y    918.7
+    ## 16  918 0.5         Y  918.0.5
+    ## 17  918 0.5         Y  918.0.5
+    ## 18  918 0.5         Y  918.0.5
+
+    ## converting counts to integer mode
+
+    ##   the design formula contains one or more numeric variables with integer values,
+    ##   specifying a model with increasing fold change for higher values.
+    ##   did you mean for this to be a factor? if so, first convert
+    ##   this variable to a factor using the factor() function
+
+    ##   the design formula contains one or more numeric variables that have mean or
+    ##   standard deviation larger than 5 (an arbitrary threshold to trigger this message).
+    ##   it is generally a good idea to center and scale numeric variables in the design
+    ##   to improve GLM convergence.
+
+    ## estimating size factors
+
+    ## estimating dispersions
+
+    ## gene-wise dispersion estimates
+
+    ## mean-dispersion relationship
+
+    ## final dispersion estimates
+
+    ## fitting model and testing
+
 ## Comparing test statistics: interactive effects
 
 ``` r
 # Merge logFC and pval data from each program
-voom_edgeR_int_comp <- merge( data.frame( geneid = row.names( pCO2_day_results ),
-                                          voom_logFC = pCO2_day_results$logFC,
-                                          voom_pval = pCO2_day_results$P.Value ),
-                              data.frame( geneid = row.names( tr_int$table ),
-                                          edgeR_logFC = tr_int$table$logFC,
-                                          edgeR_pval = tr_int$table$PValue ),
-                              by = "geneid" )
+voom_edgeR_deseq_int_comp <- merge( 
+  merge(
+    data.frame( geneid = row.names( pCO2_day_results ),
+                voom_logFC = pCO2_day_results$logFC,
+                voom_pval = pCO2_day_results$P.Value ),
+    data.frame( geneid = row.names( tr_int$table ),
+                edgeR_logFC = -( tr_int$table$logFC ), #negate logFC because of syntax differences
+                edgeR_pval = tr_int$table$PValue ), 
+    by = "geneid" ),
+  data.frame( geneid = row.names( DESeq2_int_results ),
+              DESeq2_logFC = DESeq2_int_results$log2FoldChange,
+              DESeq2_pval = DESeq2_int_results$pvalue ),
+  by = "geneid" )
 
+# Create neg log pvalues
+voom_edgeR_deseq_int_comp$voom_neglogp <- -log( voom_edgeR_deseq_int_comp$voom_pval )
+voom_edgeR_deseq_int_comp$edgeR_neglogp <- -log( voom_edgeR_deseq_int_comp$edgeR_pval )
+voom_edgeR_deseq_int_comp$DESeq2_neglogp <- -log( voom_edgeR_deseq_int_comp$DESeq2_pval )
+
+# Correlation matrix of pvalues
+pval_pairs <- ggpairs( data = voom_edgeR_deseq_int_comp,
+                       columns = c( 8, 9, 10 ),
+                       mapping = aes( alpha = 0.001 ) ) +
+  labs( title = "Correlation matrix: interaction p-values" )
+
+pval_pairs
+```
+
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-7-1.png)
+
+``` r
+# Create neg log pvalues
+voom_edgeR_deseq_int_comp$voom_neglogp <- -log( voom_edgeR_deseq_int_comp$voom_pval )
+voom_edgeR_deseq_int_comp$edgeR_neglogp <- -log( voom_edgeR_deseq_int_comp$edgeR_pval )
+voom_edgeR_deseq_int_comp$DESeq2_neglogp <- -log( voom_edgeR_deseq_int_comp$DESeq2_pval )
+
+# Correlation matrix of logFC's
+logFC_pairs <- ggpairs( data = voom_edgeR_deseq_int_comp,
+                       columns = c( 2, 4, 6 ),
+                       mapping = aes( alpha = 0.001 ) ) +
+  labs( title = "Correlation matrix: interaction logFC's" )
+
+logFC_pairs
+```
+
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-7-2.png)
+
+``` r
 # Correlation of logFC
-ggplot( data = voom_edgeR_int_comp,
+ggplot( data = voom_edgeR_deseq_int_comp,
         aes( x = voom_logFC, y = edgeR_logFC ) ) +
   geom_hex( bins = 100,
             aes(fill = stat( log( count ) ) ) ) +
   theme_classic() +
   scale_fill_viridis_c() +
   geom_smooth( method = "lm", color = "red", lty = 2 ) +
-  labs( title = "Interactions: edgeR vs. limma-voom p-values", 
+  labs( title = "Interactions: edgeR vs. limma-voom logFC's", 
         x = "limma-voom logFC",
         y = "edgeR logFC" )
 ```
 
-![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-7-1.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-7-3.png)
 
 ``` r
-# Correlation of logFC
-ggplot( data = voom_edgeR_int_comp,
+# Correlations between pvals
+ggplot( data = voom_edgeR_deseq_int_comp,
         aes( x = -log( voom_pval ), y = -log( edgeR_pval ) ) ) +
   geom_hex( bins = 100,
             aes(fill = stat( log( count ) ) ) ) +
@@ -474,6 +571,108 @@ ggplot( data = voom_edgeR_int_comp,
         y = "edgeR pval" )
 ```
 
-![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-7-2.png)
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-7-4.png)
 
-# Random Effects
+``` r
+# Correlation of logFC: edgeR vs DESeq2 
+ggplot( data = voom_edgeR_deseq_int_comp,
+        aes( x = DESeq2_logFC, y = edgeR_logFC ) ) +
+  geom_hex( bins = 100,
+            aes(fill = stat( log( count ) ) ) ) +
+  theme_classic() +
+  scale_fill_viridis_c() +
+  geom_smooth( method = "lm", color = "red", lty = 2 ) +
+  labs( title = "Interactions: edgeR vs. DESeq2 logFC's", 
+        x = "DESeq2 logFC",
+        y = "edgeR logFC" )
+```
+
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-7-5.png)
+
+``` r
+# Correlation of logFC: edgeR vs DESeq2 
+ggplot( data = voom_edgeR_deseq_int_comp,
+        aes( x = -log( DESeq2_pval ), y = -log( edgeR_pval ) ) ) +
+  geom_hex( bins = 100,
+            aes(fill = stat( log( count ) ) ) ) +
+  xlim( values = c( 0, 20 ) ) +
+  theme_classic() +
+  scale_fill_viridis_c() +
+  geom_smooth( method = "lm", color = "red", lty = 2 ) +
+  labs( title = "Interactions: edgeR vs. DESeq2 p-values", 
+        x = "DESeq2 logFC",
+        y = "edgeR logFC" )
+```
+
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-7-6.png)
+
+# Random Effects: voom
+
+We will skip edgeR and DESeq2 since they cannot fit random effects
+
+``` r
+# Fit multifactoria design matrix
+design_rand <- model.matrix( ~1 + pCO2 + ( 1 | day ) ) #Generate multivariate edgeR glm
+
+# Perform voom transformation
+voom_rand <- voom( y, design_rand, plot = T )
+```
+
+    ## Coefficients not estimable: 1 | dayTRUE
+
+    ## Warning: Partial NA coefficients for 81450 probe(s)
+
+![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-8-1.png)
+
+``` r
+# Fit using voom
+lm_voom_fit_rand <- lmFit( voom_rand, design_rand )
+```
+
+    ## Coefficients not estimable: 1 | dayTRUE
+
+    ## Warning: Partial NA coefficients for 81450 probe(s)
+
+``` r
+# Create a contrast across continuous pCO2 variable
+cont_rand_day <- contrasts.fit( lm_voom_fit_rand, coef = "pCO2" )
+
+# Perform empirical Bayes smoothing of standard errors
+lm_voom_fit_rand <- eBayes( lm_voom_fit_rand )
+```
+
+    ## Warning in .ebayes(fit = fit, proportion = proportion, stdev.coef.lim =
+    ## stdev.coef.lim, : Estimation of var.prior failed - set to default value
+
+``` r
+# Output test statistics
+rand_results <- topTable( lm_voom_fit_rand, coef = "pCO2", adjust.method = "fdr", n = Inf )
+
+# How many DEG are associated with pCO2 and pCO2:day?
+length( which( rand_results$adj.P.Val < 0.05 & abs( rand_results$logFC ) > ( 4 / 600 ) ) ) # number of DE genes = 7091
+```
+
+    ## [1] 3
+
+``` r
+length( which( rand_results$adj.P.Val < 0.05  ) ) # number of DE genes
+```
+
+    ## [1] 3
+
+``` r
+length( which( rand_results$adj.P.Val < 0.05 & 
+                 abs( rand_results$logFC ) > ( 4 / 600 ) ) ) # number of DE genes = 7091
+```
+
+    ## [1] 3
+
+``` r
+length( which( rand_results$adj.P.Val < 0.05  ) ) # number of DE genes
+```
+
+    ## [1] 3
+
+Random slopes: to our knowledge, no DESeq package permits the fitting of random slopes
+
+What we want to test whether the effect of *p*CO**<sub>2</sub> on expression varies by time, treating time as a random effect with different intercepts but a parameter?
