@@ -39,7 +39,7 @@ bibliography: DGE_Comp.bib
 
 ##Summary of approach
 
-|           We will walk you through (i) how to conduct essential checks of your data such as principle components analysis and observing the distribution of filtered read counts, (ii) evaluating each package's functionality for multifactorial model fitting, and (iii) how to fit each type of predictor by performing differential expression tests using real data. These data come from an experiment that exposed the Anatarctic pteropod (a free-swimming planktonic snail) *Limacina helicina antarctica* to three continuous levels of ocean acidification (OA) for either 0.5 or 7 days. These RNA-seq counts are derived from reads mapped and counted via RSEM [@Li2011-mi] using a *de novo* reference transcriptome assembled by @Johnson2016-wq. 
+|           We will walk you through (i) how to conduct essential checks of your data such as principle components analysis and observing the distribution of filtered read counts, (ii) evaluating each package's functionality for multifactorial model fitting, and (iii) how to fit each type of predictor by performing differential expression tests using real data. These data come from an experiment that exposed the Anatarctic pteropod (a free-swimming planktonic snail) *Limacina helicina antarctica* to three continuous levels of ocean acidification (OA) for either 0.5 or 7 days. These RNA-seq counts are derived from reads mapped and counted via RSEM [@Li2011-mi] using a *de novo* reference transcriptome assembled by @Johnson2016-wq. Read counts were produced by RSEM, mapped to a *de novo* transcriptome assembly for the Antarctic pteropod *Limacina helicina antarctica*.
 
 ```{r setup, include = FALSE}
 
@@ -78,14 +78,14 @@ library( adegenet )
 ```
 
 #Features of popular DGE packages
-| Program | Distribution | Dispersal | Random eff. | Continuous var. | Interactive eff. |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| EBSeq | Negative binomial | ? | ✖ | ✖ | ✖ |
-| edgeR | Negative binomial | Avg., trended, tagwise, and Bayesian shrinkage options | ✔ |  ✔ |  ✔ |  ✔ | 
-| DESeq2 | Negative binomial | Avg., trended, tagwise, and shrinkage options, | ✔ | ✔ | ✔|
-| limma-voom | Mean-variance estimate | Empirical Bayes smooth | ✔ | ✔ |  ✔|  
 
-Read counts were produced by RSEM, mapped to a *de novo* transcriptome assembly for the Antarctic pteropod *Limacina helicina antarctica*.
+| Program | Distribution | Continuous fixed eff. | Random intercepts | Random slopes | Interactive eff. | Non-linear eff. |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| bayeSeq | Negative binomial | ? | ? | ? | ? | ? |
+| EBSeq | Negative binomial | ✔ | ✖ | ✖ | ✖ | ✖ |  
+| edgeR | Negative binomial | ✔ | ✔ |  ✖ |  ✔ |  ✔ |  
+| DESeq2 | Negative binomial | ✔ | ✔ | ✖ | ✔|   ✔ | 
+| Voom | Mean-variance estimate | ✔ | ✔ | ✖ |  ✔|   ✔ | 
 
 #Filter and visualize read counts
 

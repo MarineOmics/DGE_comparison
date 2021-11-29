@@ -30,7 +30,7 @@ Sam Bogan
 
 ## Summary of approach
 
-          We will walk you through (i) how to conduct essential checks of your data such as principle components analysis and observing the distribution of filtered read counts, (ii) evaluating each package's functionality for multifactorial model fitting, and (iii) how to fit each type of predictor by performing differential expression tests using real data. These data come from an experiment that exposed the Anatarctic pteropod (a free-swimming planktonic snail) *Limacina helicina antarctica* to three continuous levels of ocean acidification (OA) for either 0.5 or 7 days. These RNA-seq counts are derived from reads mapped and counted via RSEM (Li & Dewey, 2011) using a *de novo* reference transcriptome assembled by Johnson & Hofmann (2016).
+          We will walk you through (i) how to conduct essential checks of your data such as principle components analysis and observing the distribution of filtered read counts, (ii) evaluating each package's functionality for multifactorial model fitting, and (iii) how to fit each type of predictor by performing differential expression tests using real data. These data come from an experiment that exposed the Anatarctic pteropod (a free-swimming planktonic snail) *Limacina helicina antarctica* to three continuous levels of ocean acidification (OA) for either 0.5 or 7 days. These RNA-seq counts are derived from reads mapped and counted via RSEM (Li & Dewey, 2011) using a *de novo* reference transcriptome assembled by Johnson & Hofmann (2016). Read counts were produced by RSEM, mapped to a *de novo* transcriptome assembly for the Antarctic pteropod *Limacina helicina antarctica*.
 
 ``` r
 # Load packages
@@ -62,49 +62,55 @@ library( adegenet )
 <tr class="header">
 <th align="left">Program</th>
 <th align="left">Distribution</th>
-<th align="left">Dispersal</th>
-<th align="left">Random eff.</th>
-<th align="left">Continuous var.</th>
+<th align="left">Continuous fixed eff.</th>
+<th align="left">Random intercepts</th>
+<th align="left">Random slopes</th>
 <th align="left">Interactive eff.</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td align="left">EBSeq</td>
+<td align="left">bayeSeq</td>
 <td align="left">Negative binomial</td>
 <td align="left">?</td>
+<td align="left">?</td>
+<td align="left">?</td>
+<td align="left">?</td>
+</tr>
+<tr class="even">
+<td align="left">EBSeq</td>
+<td align="left">Negative binomial</td>
+<td align="left">✔</td>
 <td align="left">✖</td>
 <td align="left">✖</td>
 <td align="left">✖</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td align="left">edgeR</td>
 <td align="left">Negative binomial</td>
-<td align="left">Avg., trended, tagwise, and Bayesian shrinkage options</td>
 <td align="left">✔</td>
 <td align="left">✔</td>
+<td align="left">✖</td>
+<td align="left">✔</td>
+</tr>
+<tr class="even">
+<td align="left">DESeq2</td>
+<td align="left">Negative binomial</td>
+<td align="left">✔</td>
+<td align="left">✔</td>
+<td align="left">✖</td>
 <td align="left">✔</td>
 </tr>
 <tr class="odd">
-<td align="left">DESeq2</td>
-<td align="left">Negative binomial</td>
-<td align="left">Avg., trended, tagwise, and shrinkage options,</td>
-<td align="left">✔</td>
-<td align="left">✔</td>
-<td align="left">✔</td>
-</tr>
-<tr class="even">
-<td align="left">limma-voom</td>
+<td align="left">Voom</td>
 <td align="left">Mean-variance estimate</td>
-<td align="left">Empirical Bayes smooth</td>
 <td align="left">✔</td>
 <td align="left">✔</td>
+<td align="left">✖</td>
 <td align="left">✔</td>
 </tr>
 </tbody>
 </table>
-
-Read counts were produced by RSEM, mapped to a *de novo* transcriptome assembly for the Antarctic pteropod *Limacina helicina antarctica*.
 
 # Filter and visualize read counts
 
