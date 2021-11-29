@@ -5,7 +5,32 @@ Sam Bogan
 
 # Intro to multifactorial RNA-seq models
 
-    Studies of molecular responses to environmental change increasingly employ multifactorial experimental designs. Incorporating multiple developmental stages, stressors, or populations in RNA-seq experiments can better resolve interactions and autocorrelation among these variables, which can critically shape expression, physiology, and performance. However, downstream analyses resulting from mutlifactorial RNA-seq experiments rarely employ multifactorial models, deferring instead to pairwise contrasts of differential expression (DE). One reason many RNA-seq studies do not test for or report model results for predictors such as random effects, time series, or interactions, is that popular DE packages provide limited functionality for fitting multifactorial models. Here we will break down the strengths and limits of several DE packages as they apply to multifactorial study designs, guide users through the process of determining which packages are best suited to certain designs, and provide custom 'in-house' code for more flexibly fitting multifactorial models of gene expression. 
+          Studies of molecular responses to environmental change increasingly employ multifactorial experimental designs incorporating multiple developmental stages, stressors, populations, or non-linear dynamics that resolve interactions which shape expression, physiology, and performance. However, it can be difficult to navigate what functionality popular differential expression (DE) packages have for fitting multivariate models. Additionally, most packages do not have the flexibility to accomodate a number of common experimental design components. Regardless of whether you have RNA-seq data on hand or you're in the process of planning your experiment, this walkthrough will help you navigate what DE packages and model fitting approaches are best suited to your experimental design.
+
+## Variables we will cover
+
+          This walkthrough can be broken down into different types of predictor variables that can be incoporated in models of expression. In the order we address them, these are:
+
+-   Continuous fixed effects
+-   Interactive fixed effects
+-   Random intercepts
+-   Random slopes
+-   Random effects for non-independence (e.g., sample relatedness)
+-   Non-linear fixed effects
+
+## Packages we will cover
+
+          We conclude this walkthrough by providing examples of in-house scripts for modelling expression and quantifying DE that provide more flexibility for fitting complex multivariate designs. The packages that we cover are:
+
+-   baySeq (Hardcastle & Kelly, 2010)
+-   DESeq2 (Love, Huber, & Anders, 2014)
+-   EBSeq (Leng et al., 2013)
+-   edgeR (Robinson, McCarthy, & Smyth, 2010)
+-   Voom (often called Limma-Voom) (Law, Chen, Shi, & Smyth, 2014)
+
+## Summary of approach
+
+          We will walk you through (i) how to conduct essential checks of your data such as principle components analysis and observing the distribution of filtered read counts, (ii) evaluating each package's functionality for multifactorial model fitting, and (iii) how to fit each type of predictor by performing differential expression tests using real data. These data come from an experiment that exposed the Anatarctic pteropod (a free-swimming planktonic snail) *Limacina helicina antarctica* to three continuous levels of ocean acidification (OA) for either 0.5 or 7 days. These RNA-seq counts are derived from reads mapped and counted via RSEM (Li & Dewey, 2011) using a *de novo* reference transcriptome assembled by Johnson & Hofmann (2016). Read counts were produced by RSEM, mapped to a *de novo* transcriptome assembly for the Antarctic pteropod *Limacina helicina antarctica*.
 
 ``` r
 # Load packages
@@ -22,8 +47,6 @@ library( dplyr )
 library( adegenet )
 ```
 
-Read counts were produced by RSEM, mapped to a *de novo* transcriptome assembly for the Antarctic pteropod *Limacina helicina antarctica*.
-
 # Features of popular DGE packages
 
 <table style="width:42%;">
@@ -39,43 +62,51 @@ Read counts were produced by RSEM, mapped to a *de novo* transcriptome assembly 
 <tr class="header">
 <th align="left">Program</th>
 <th align="left">Distribution</th>
-<th align="left">Dispersal</th>
-<th align="left">Random eff.</th>
-<th align="left">Continuous var.</th>
+<th align="left">Continuous fixed eff.</th>
+<th align="left">Random intercepts</th>
+<th align="left">Random slopes</th>
 <th align="left">Interactive eff.</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td align="left">EBSeq</td>
+<td align="left">bayeSeq</td>
 <td align="left">Negative binomial</td>
 <td align="left">?</td>
+<td align="left">?</td>
+<td align="left">?</td>
+<td align="left">?</td>
+</tr>
+<tr class="even">
+<td align="left">EBSeq</td>
+<td align="left">Negative binomial</td>
+<td align="left">✔</td>
 <td align="left">✖</td>
 <td align="left">✖</td>
 <td align="left">✖</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td align="left">edgeR</td>
 <td align="left">Negative binomial</td>
-<td align="left">Avg., trended, tagwise, and Bayesian shrinkage options</td>
 <td align="left">✔</td>
 <td align="left">✔</td>
+<td align="left">✖</td>
+<td align="left">✔</td>
+</tr>
+<tr class="even">
+<td align="left">DESeq2</td>
+<td align="left">Negative binomial</td>
+<td align="left">✔</td>
+<td align="left">✔</td>
+<td align="left">✖</td>
 <td align="left">✔</td>
 </tr>
 <tr class="odd">
-<td align="left">DESeq2</td>
-<td align="left">Negative binomial</td>
-<td align="left">Avg., trended, tagwise, and shrinkage options,</td>
-<td align="left">✔</td>
-<td align="left">✔</td>
-<td align="left">✔</td>
-</tr>
-<tr class="even">
-<td align="left">limma-voom</td>
+<td align="left">Voom</td>
 <td align="left">Mean-variance estimate</td>
-<td align="left">Empirical Bayes smooth</td>
 <td align="left">✔</td>
 <td align="left">✔</td>
+<td align="left">✖</td>
 <td align="left">✔</td>
 </tr>
 </tbody>
@@ -225,6 +256,8 @@ ggplot( data = data.frame( rowMeans( data_input ) ),
 
 ## MDS plot visualizing mutliple factors
 
+          Before analyzing our data, it is essential that we look at the multivariate relationships between our samples based on transcriptome-wide expression levels. Below is example code and output for a principle coordinates analysis (PCOA) plot that visualizes multifactorial RNA-seq replicates according to two predictor variables across major and minor latent variables or PCOA axes. These predictor variables, as discussed above, are *p*CO**<sub>2</sub> and time-in-treatment.
+
 ``` r
 # Make a DGEList object for edgeR
 y <- DGEList( counts = data_input, remove.zeros = TRUE )
@@ -301,7 +334,11 @@ ordihull( logCPM.pca$x, targets$grouping,
 
 ![](DGE_comparison_files/figure-markdown_github/unnamed-chunk-3-2.png)
 
+          From this PCOA, we can see that treatment and time both influence multivariate gene expression across the RNA-seq samples. By and large, samples also cluster according to these two predictors in a manner consistent with what we would expect from our experimental design. After conducting QC analyses and plots of the read count data, it is time to begin model fitting and testing for differential expression.
+
 # Interactive effects
+
+        Interactive effects shaping gene expression are common in nature and are becoming increasingly prevalent in models of gene expression derived from experimental studies. Below, we outline methods for fitting intereactive effects using categorical and continuous variables in models of expression. We provide examples in edgeR, DESeq2, and Voom before comparing correlations between these programs' fold change (logFC) predictions and test statistics.
 
 ## Interactive effects: edgeR
 
@@ -676,3 +713,23 @@ length( which( rand_results$adj.P.Val < 0.05  ) ) # number of DE genes
 Random slopes: to our knowledge, no DESeq package permits the fitting of random slopes
 
 What we want to test whether the effect of *p*CO**<sub>2</sub> on expression varies by time, treating time as a random effect with different intercepts but a parameter?
+
+# GO enrichment
+
+Gene ontology (GO) are broad categories of gene function and processes that can help reveal higher level patterns in gene expression (and other data). To perfom this analysis you will need an annotation file that maps your transcripts to their appropriate GO annotations. Several programs are avaiable for GO enrichment analyses. We will cover a versatile option: GO MWU (Man-Whitney Un-ranked) which uses a simple ranking analyses to determine if certain GO categories are over represented among a list of ranked gene. These can be ranked based on log-fold change or p values, as well as a few other variable such as WGCNA eigen-gene module membership strength. See below for a description of WGCNA and its uses.
+
+## GO\_MWU
+
+Hardcastle, T. J., & Kelly, K. A. (2010). BaySeq: Empirical bayesian methods for identifying differential expression in sequence count data. *BMC Bioinformatics*, *11*, 422.
+
+Johnson, K. M., & Hofmann, G. E. (2016). A transcriptome resource for the antarctic pteropod limacina helicina antarctica. *Mar. Genomics*, *28*, 25–28.
+
+Law, C. W., Chen, Y., Shi, W., & Smyth, G. K. (2014). Voom: Precision weights unlock linear model analysis tools for RNA-seq read counts. *Genome Biol.*, *15*(2), R29.
+
+Leng, N., Dawson, J. A., Thomson, J. A., Ruotti, V., Rissman, A. I., Smits, B. M. G., … Kendziorski, C. (2013). EBSeq: An empirical bayes hierarchical model for inference in RNA-seq experiments. *Bioinformatics*, *29*(8), 1035–1043.
+
+Li, B., & Dewey, C. N. (2011). RSEM: Accurate transcript quantification from RNA-Seq data with or without a reference genome. *BMC Bioinformatics*, *12*, 323.
+
+Love, M. I., Huber, W., & Anders, S. (2014). Moderated estimation of fold change and dispersion for RNA-seq data with DESeq2. *Genome Biol.*, *15*(12), 550.
+
+Robinson, M. D., McCarthy, D. J., & Smyth, G. K. (2010). EdgeR: A bioconductor package for differential expression analysis of digital gene expression data. *Bioinformatics*, *26*(1), 139–140.
