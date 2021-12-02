@@ -1,7 +1,6 @@
 ---
 title: "DGE_comparison"
-author: "Sam Bogan"
-date: "8/1/2021"
+author: "Sam Bogan, Hanny Rivera,Alan Downey-Wall"
 output:
   github_document: default
   html_document:
@@ -12,13 +11,16 @@ csl: molecular-ecology.csl
 bibliography: DGE_Comp.bib
 ---
 
+#Notice to readers
+This markdown remains a work in progress!
+
 #Intro to multifactorial RNA-seq models
 
 |           Studies of molecular responses to environmental change increasingly employ multifactorial experimental designs incorporating multiple developmental stages, stressors, populations, or non-linear dynamics that resolve interactions which shape expression, physiology, and performance. However, it can be difficult to navigate what functionality popular differential expression (DE) packages have for fitting multivariate models. Additionally, most packages do not have the flexibility to accomodate a number of common experimental design components. Regardless of whether you have RNA-seq data on hand or you're in the process of planning your experiment, this walkthrough will help you navigate what DE packages and model fitting approaches are best suited to your experimental design.
 
 ##Variables we will cover
 
-|           This walkthrough can be broken down into different types of predictor variables that can be incoporated in models of expression. In the order we address them, these are:
+|           This walkthrough can be broken down into different types of predictor variables that can be incoporated in models of gene expression. In the order we address them, these variables include:
 
 * Continuous fixed effects
 * Interactive fixed effects
@@ -37,6 +39,15 @@ bibliography: DGE_Comp.bib
 * edgeR [@Robinson2010-fd]
 * Voom (often called Limma-Voom) [@Law2014-ce]
 
+##Defining terms
+
+|           The following terms will be used throughout this walk through, and may not be familiar to each reader. We've included their definitions below:
+
+*   **Dispersion** -
+*   **Negative binomial distribution** -
+*   **Model fitting** - 
+*   **Principal coordinates analysis** - 
+
 ##Summary of approach
 
 |           We will walk you through (i) how to conduct essential checks of your data such as principle components analysis and observing the distribution of filtered read counts, (ii) evaluating each package's functionality for multifactorial model fitting, and (iii) how to fit each type of predictor by performing differential expression tests using real data. These data come from an experiment that exposed the Anatarctic pteropod (a free-swimming planktonic snail) *Limacina helicina antarctica* to three continuous levels of ocean acidification (OA) for either 0.5 or 7 days. These RNA-seq counts are derived from reads mapped and counted via RSEM [@Li2011-mi] using a *de novo* reference transcriptome assembled by @Johnson2016-wq. Read counts were produced by RSEM, mapped to a *de novo* transcriptome assembly for the Antarctic pteropod *Limacina helicina antarctica*.
@@ -45,18 +56,6 @@ bibliography: DGE_Comp.bib
 
 # Set root directory
 knitr::opts_knit$set( root.dir = '~/Documents/GitHub/DEG_comparison/' )
-
-colorize <- function( x, color ) {
-  if ( knitr::is_latex_output() ) {
-    sprintf("\\textcolor{%s}{%s}", color, x)
-  } else if ( knitr::is_github_output() ) {
-    sprintf( "<span style='color: %s;'>%s</span>", color,
-      x)
-  } else x
-}
-
-# Set bash code chunks to use bash_profile
-knitr::opts_chunk$set( engine.opts = list( bash = "-l" ) )
 
 ```
 
@@ -74,20 +73,27 @@ library( arrayQualityMetrics )
 library( rgl )
 library( dplyr )
 library( adegenet )
+library( MASS )
 
 ```
 
 #Features of popular DGE packages
 
+|           Two important considerations when choosing a DE package to analyze RNA-seq data are the distribution family used by the package and the effect types it incorporate into a model. The DE packages we will cover assume the following read count distributions and are capable of fitting the following effect types:
+
 | Program | Distribution | Continuous fixed eff. | Random intercepts | Random slopes | Interactive eff. | Non-linear eff. |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | bayeSeq | Negative binomial | ? | ? | ? | ? | ? |
 | EBSeq | Negative binomial | ✔ | ✖ | ✖ | ✖ | ✖ |  
-| edgeR | Negative binomial | ✔ | ✔ |  ✖ |  ✔ |  ✔ |  
-| DESeq2 | Negative binomial | ✔ | ✔ | ✖ | ✔|   ✔ | 
+| edgeR | Negative binomial | ✔ | ✖ |  ✖ |  ✔ |  ✔ |  
+| DESeq2 | Negative binomial | ✔ | ✖ | ✖ | ✔|   ✔ | 
 | Voom | Mean-variance estimate | ✔ | ✔ | ✖ |  ✔|   ✔ | 
 
 #Filter and visualize read counts
+
+|           Before model fitting and testing for DE, it is important to visually inspect read counts pre- and post-filtering. In this walk through, we will plot the distributions of read counts and sample loading to multidimensional scaling axes (e.g., plotting principal components or principal coordinates analyses). Looking at these plots, we can (i) determine whether the distribution of our data match the assumptions of model families used by different packages and (ii) determine whether one or multiple variables within a dataset explain a significant degree of variation in gene expression across replicates. Depending on the distribution of your data and the variables that appear important (or variable you would like to incorporate into your models), we will then demonstrate how to choose an appropriate package to test for DE.
+|           Most DE packages assume that read counts possess a negative binomial distribution. The negative binomial distribution is an extension of distributions for binary variables such as the Poisson distribution, allowing for estimations of "equidisperson" and "overdispersion", equal and greater-than-expected variation in expression attributed to biological variability . However, RNA-seq datasets often exhibit poor fits with the negative binomial distribution [@Hawinkel2020-lk]. It is well worth visualizing and testing the distributions of RNA-seq read counts before and after filtering. 
+|           First let's plot the distribution of unfiltered reads from the Pteropod dataset:
 
 ```{r, message = FALSE, warning = FALSE}
 
@@ -130,7 +136,7 @@ head( data_input )
 # Plot distribution of unfiltered read counts across all samples 
 ggplot( data = data.frame( rowMeans( data_input ) ),
         aes( x = rowMeans.data_input. ) ) +
-  geom_density( fill = "grey" ) +
+  geom_histogram( fill = "grey" ) +
   xlim( 0, 500 ) +
   theme_classic() +
   labs( title = "Distribution of unfiltered reads" ) +
@@ -138,9 +144,7 @@ ggplot( data = data.frame( rowMeans( data_input ) ),
 
 ```
 
-##MDS plot visualizing mutliple factors
-
-|           Before analyzing our data, it is essential that we look at the multivariate relationships between our samples based on transcriptome-wide expression levels. Below is example code and output for a principle coordinates analysis (PCOA) plot that visualizes multifactorial RNA-seq replicates according to two predictor variables across major and minor latent variables or PCOA axes. These predictor variables, as discussed above, are *p*CO${_2}$ and time-in-treatment.
+|           Next, let's plot the distribution of filtered reads normalized by library size, expressed as log2 counts per million reads (logCPM):
 
 ```{r, message = FALSE, warning = FALSE}
 
@@ -159,6 +163,22 @@ y <- calcNormFactors( y )
 
 # Calculate logCPM
 df_log <- cpm( y, log = TRUE, prior.count = 2 )
+
+# Plot distribution of filtered logCPM values
+ggplot( data = data.frame( rowMeans( df_log ) ),
+        aes( x = rowMeans.df_log. ) ) +
+  geom_histogram( fill = "grey" ) +
+  theme_classic() +
+  labs( y = "Density", x = "Filtered read counts (logCPM)", 
+        title = "Distribution of normalized, filtered read counts" )
+
+```
+
+##MDS plot visualizing mutliple factors
+
+|           Before analyzing our data, it is essential that we look at the multivariate relationships between our samples based on transcriptome-wide expression levels. Below is example code and output for a principle coordinates analysis (PCOA) plot that visualizes multifactorial RNA-seq replicates according to two predictor variables across major and minor latent variables or PCOA axes. These predictor variables, as discussed above, are *p*CO${_2}$ and time-in-treatment.
+
+```{r, message = FALSE, warning = FALSE}
 
 # Export pcoa loadings
 dds.pcoa = pcoa( vegdist( t( df_log <- cpm( y, log = TRUE, prior.count = 2 ) ),
@@ -292,8 +312,6 @@ length( which( pCO2_day_results$adj.P.Val < 0.05  ) ) # number of DE genes
 ```
 
 ##Interactive effects: DESeq2
-
-In this current draft, it appears that fitting the interaction term ~ pCO2:day ONLY, rather than adding pCO2 + day + ..., results in the strongest correlations with voom and edgeR interaction stats. I am currently figuring out why this is.
 
 As such, the DESeq2 code below only fits the interaction term to the read count data.
 
@@ -471,8 +489,15 @@ length( which( rand_results$adj.P.Val < 0.05  ) ) # number of DE genes
 
 Random slopes: to our knowledge, no DESeq package permits the fitting of random slopes
 
-What we want to test whether the effect of *p*CO$_{2}$ on expression varies by time, treating time as a random effect with different intercepts but a \beta parameter?
+#GO enrichment 
 
+|           Gene ontology (GO) are broad categories of gene function and processes that can help reveal higher level patterns in gene expression (and other data). To perfom this analysis you will need an annotation file that maps your transcripts to their appropriate GO annotations. Several programs are avaiable for GO enrichment analyses. We will cover a versatile option: GO MWU (Man-Whitney Un-ranked) which uses a simple ranking analyses to determine if certain GO categories are over represented among a list of ranked gene. These can be ranked based on log-fold change or p values, as well as a few other variable such as WGCNA eigen-gene module membership strength. See below for a description of WGCNA and its uses.
+
+<<<<<<< HEAD
+##GO_MWU
+
+##References
+=======
 # GO enrichment 
 Gene ontology (GO) are broad categories of gene function and processes that can help reveal higher level patterns in gene expression (and other data). To perform this analysis you will need an annotation file that maps your transcripts to their appropriate GO annotations. Several programs are available for GO enrichment analyses. We will cover a versatile option: GO MWU (Man-Whitney Un-ranked) which uses a simple ranking analyses to determine if certain GO categories are over represented among a list of ranked gene. These can be ranked based on log-fold change or p values, as well as a few other variable such as WGCNA eigen-gene module membership strength. See below for a description of WGCNA and its uses.
 
@@ -526,10 +551,4 @@ gomwuStats(input, goDatabase, goAnnotations, goDivision,
 # do not continue if the printout shows that no GO terms pass 10% FDR.
 ```
 
-
-
-
-
-
-
-
+>>>>>>> fdaa9f6498e3d99c42e333631fd15c35584711b1
