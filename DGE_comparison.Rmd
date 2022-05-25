@@ -1,5 +1,5 @@
 ---
-title: "DGE_comparison"
+title: "Fitting Multifactorial Models of Differential Expression"
 author: "Sam Bogan"
 output:
   html_document:
@@ -11,12 +11,12 @@ csl: molecular-ecology.csl
 bibliography: DGE_Comp.bib
 ---
 
-#Notice to readers
-This markdown remains a work in progress!
-
 #Intro to multifactorial RNA-seq models
 
-|           Studies of molecular responses to environmental change increasingly employ multifactorial experimental designs incorporating multiple developmental stages, stressors, populations, or non-linear dynamics that resolve interactions which shape expression, physiology, and performance. However, it can be difficult to navigate what functionality popular differential expression (DE) packages have for fitting multivariate models or how to fit customized multifactorial models yourself when necessary. Additionally, most packages do not have the flexibility to accomodate a number of common experimental design components. Regardless of whether you have RNA-seq data on hand or you're in the process of planning your experiment, this walkthrough will help you navigate what DE packages and model fitting approaches are best suited to your experimental design.
+|           Studies of molecular responses to environmental change increasingly employ multifactorial experimental designs incorporating different developmental stages, stressors, populations, or non-linear dynamics that resolve interactions between variables that shape expression, physiology, and performance. After an experiment during which a study organism was exposed to abiotic variation and perhaps other variables, researchers interested in how gene expression correlates with these variables will often extract RNA across treatment groups, prepare cDNA libraries for sequencing, and conduct an analysis of differential expression (DE) across variables of interest after mapping and counting RNA-seq reads. DE analysis is achieved by fitting RNA-seq read count data to statistical models, often using tried-and-true DE packages. Most packages do not have the flexibility to accomodate a number of common experimental design components and it can be difficult to navigate their functionality for fitting multivariate models. When these packages fall short, determining how to fit customized multifactorial models yourself can be an additional challenge. Many great walkthroughs exist for conducting DE analysis across using single-variable experimental designs, but there is a lack of guidance on multifactorial approaches for testing for DE and modelling gene expression. Regardless of whether you have RNA-seq data on hand or you're in the process of planning your experiment, this walkthrough will help you navigate what DE packages and model fitting approaches are best suited to your experimental design.
+
+##Targeted audience
+|           This walkthrough is for both intermediate and expert practitioners of RNA-seq analyses, and most of all, those new to multifactorial RNA-seq. We have written this page with the assumption that readers have a basic familiarity with model fitting and statistical analysis, as well as next generation sequencing technologies, RNA-seq workflows, and the R statistical environment.
 
 ##Variables we will cover
 
@@ -30,9 +30,9 @@ This markdown remains a work in progress!
 
 ##Packages we will cover
 
-* DESeq2 [@Love2014-fy]
-* edgeR [@Robinson2010-fd]
-* Voom (often called Limma-Voom) [@Law2014-ce]
+* DESeq2 [@Love2014-fy] [Link](http://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html)
+* edgeR [@Robinson2010-fd] [Link](https://www.bioconductor.org/packages/devel/bioc/vignettes/edgeR/inst/doc/edgeRUsersGuide.pdf)
+* Voom (often called Limma-Voom) [@Law2014-ce] [Link](https://ucdavis-bioinformatics-training.github.io/2018-June-RNA-Seq-Workshop/thursday/DE.html)
 
 #Features of popular DGE packages
 
@@ -40,15 +40,15 @@ This markdown remains a work in progress!
 
 | Program | Distribution | Continuous fixed eff. | Random intercepts | Random slopes | Interactive eff. | Non-linear eff. |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| edgeR | Negative binomial | ✔ | ✖ |  ✖ |  ✔ |  ✔ |  
-| DESeq2 | Negative binomial | ✔ | ✖ | ✖ | ✔|   ✔ | 
-| Voom | Mean-variance estimate | ✔ | ✔ | ✖ |  ✔|   ✔ | 
+| edgeR | Negative binomial generalized linear model | ✔ | ✖ |  ✖ |  ✔ |  ✔ |  
+| DESeq2 | Negative binomial generalized linear model | ✔ | ✖ | ✖ | ✔|   ✔ | 
+| Voom | Mean-variance linear model | ✔ | ✔ | ✖ |  ✔|   ✔ | 
 
 ##Summary of approach
 
-|           We will walk you through (i) how to conduct essential checks of your data such as principle components analysis and observing the distribution of filtered read counts, (ii) evaluating each package's functionality for multifactorial model fitting, and (iii) how to fit each type of predictor by performing differential expression tests using real data. These data come from an experiment that exposed the Anatarctic pteropod (a free-swimming planktonic snail) *Limacina helicina antarctica* to three continuous levels of ocean acidification (OA) for either 0.5 or 7 days. These RNA-seq counts are derived from reads mapped and counted via RSEM [@Li2011-mi] using a *de novo* reference transcriptome that includes transcript isoforms assembled by @Johnson2016-wq.
+|           We will walk you through (i) how to conduct essential checks of your data such as principle components analysis and observing the distribution of filtered read counts, (ii) evaluating each package's functionality for multifactorial model fitting, and (iii) how to fit each type of predictor by performing differential expression tests using real data. These data come from an experiment that exposed the Anatarctic pteropod (a free-swimming planktonic snail) *Limacina helicina antarctica* to three continuous levels of ocean acidification (OA) for either 0.5 or 7 days [@Bogan2020-qs]. These RNA-seq counts are derived from reads mapped and counted via RSEM [@Li2011-mi] using a *de novo* reference transcriptome that includes transcript isoforms assembled by @Johnson2016-wq.
 
-|           Throughout this walkthrough, we will provide examples of in-house scripts for fitting linear, linear mixed models, generalized linear models to read count data using for loops in order to provide functionality where it cannt be met by most differential expression packages.
+|           Throughout this walkthrough, we will provide examples of custom scripts for fitting linear, linear mixed models, generalized linear models to read count data using for loops in order to provide functionality where it cannt be met by most differential expression packages.
 
 |           At the end of the walkthrough, we demonstrate how to compare model predictions by different packages for different effect types commonly used in multifactorial RNAseq analyses.
 
@@ -100,8 +100,10 @@ library(lmerTest)
 |           Before model fitting and testing for DE, it is important to visually inspect read counts pre- and post-filtering. In this walk through, we will plot the distributions of read counts and sample loading to multidimensional scaling axes (e.g., plotting principal components or principal coordinates analyses). Looking at these plots, we can (i) determine whether the distribution of our data match the assumptions of model families used by different packages and (ii) determine whether one or multiple variables within a dataset explain a significant degree of variation in gene expression across replicates. Depending on the distribution of your data and the variables that appear important (or variable you would like to incorporate into your models), we will then demonstrate how to choose an appropriate package to test for DE.
 |           Most DE packages assume that read counts possess a negative binomial distribution. The negative binomial distribution is an extension of distributions for binary variables such as the Poisson distribution, allowing for estimations of "equidisperson" and "overdispersion", equal and greater-than-expected variation in expression attributed to biological variability . However, RNA-seq datasets can exhibit poor fits with the negative binomial distribution [@Hawinkel2020-lk]. It is well worth visualizing and testing the distributions of RNA-seq read counts before and after filtering. Keep in mind that the distribution applies not to the raw data, but the residuals of a model. Additionally, individual models are fit to the read counts of each gene. Thus, the most accurate representation of how appropriate a negative binomial distribution is for read counts would come from plotting the distribution of residuals across all genes following model fitting. Below is a visual example of negative binomial distributions that possess different variances from modelassist[dot]epixanalytics[dot]com:
 
-```{r, echo = FALSE, out.height = "40%", fig.align = "center", }
+```{r, echo = FALSE, out.height = "300%", fig.align = "center", }
+
 knitr::include_graphics("images/negbinom.png")
+
 ```
 
 |           Now let's first plot the distribution of unfiltered reads from our dataset:
@@ -109,17 +111,22 @@ knitr::include_graphics("images/negbinom.png")
 ```{r, message = FALSE, warning = FALSE}
 
 # Read in matrix of RSEM expected read counts
-data <- read.delim( "Input_data/GE2_expected_counts_gene.matrix", sep = "\t", header = T, row.names = 1 )
+data <- read.delim("Input_data/GE2_expected_counts_gene.matrix", sep = "\t", header = T, row.names = 1)
 
 # Peak at data to check that it looks okay
-head( data )
+head(data)
 
+```
+
+|           The table of read counts above has rows representing individual transcripts and columns representing different replicate samples across treatments.
+
+```{r, message = FALSE, warning = FALSE}
 # Name experimental samples: names correspond to pCO2 treatment (300, 600, 900) + days (12 h2 vs 7 days) + replicate ID
-colnames( data ) <- c( "300.7.a", "300.7.b", "300.7.c","300.12.a", "300.12.b", "300.12.c", 
+colnames(data) <- c( "300.7.a", "300.7.b", "300.7.c","300.12.a", "300.12.b", "300.12.c", 
                        "900.7.a", "900.7.b", "900.7.c", "900.12.a", "900.12.b", "900.12.c", 
                        "600.7.a", "600.7.b", "600.7.c", "600.12.a", "600.12.b", "600.12.c")
 
-# Create 'targets' and 'Group dataframe, expressing experimental variables for DEG analysis 
+## Create 'targets' and 'Group dataframe, expressing experimental variables for DEG analysis
 pCO2 <- as.numeric( c( 255, 255, 255, 255, 255, 255,
                        530, 530, 530, 530, 530, 530,
                        918, 918, 918, 918, 918, 918 ) )
@@ -135,8 +142,8 @@ day <- as.numeric( c( 7, 7, 7, .5, .5, .5,
 targets <- data.frame( pCO2, day, treatment )
 targets$grouping <- paste( targets$pCO2, targets$day, sep = "." )
 
+# The group factor represents the combined levels of an experimental replicate across all variables
 Group <- factor( paste( targets$day, targets$pCO2, sep = "_" ) )
-cbind( targets, Group = Group )
 
 # Data must be rounded to nearest integer in order to be fit for negative binomial distribution
 data_input <- round( data )
@@ -155,7 +162,7 @@ ggplot( data = data.frame( rowMeans( data_input ) ),
 
 ```
 
-|           Next, let's plot the distribution of filtered reads normalized by library size, expressed as log2 counts per million reads (logCPM):
+|           As you can see in the above plot, the raw distribution of all read counts takes on a left-skewed negative binomial distribution similar to the purple distribution in the example above. While looking at the distribution of your raw reads is useful, these are not in fact the data you will be inputting to tests of differential expression. Let's plot the distribution of filtered reads normalized by library size, expressed as log2 counts per million reads (logCPM). These are the reads we will use in our test, and after we plot their distribution we will conduct one more, slightly more robust, test of our data's fit to the negative binomial distribution using residuals from fitted models.
 
 ```{r, message = FALSE, warning = FALSE}
 
@@ -185,7 +192,7 @@ ggplot( data = data.frame( rowMeans( df_log ) ),
 
 ```
 
-|           Our raw data appear to follow a strong negative binomial distribution! Later, we will see whether this holds for residuals from  fitted negative binomial GLMs.
+|           Our raw data appear to follow a strong negative binomial distribution! Later, we will see whether this holds for residuals from fitted negative binomial GLMs.
 
 ##MDS plot visualizing experimental factors
 
@@ -223,6 +230,12 @@ ordispider( scores,as.factor( targets$grouping ),label = F ) # Vectors connectin
 
 ordilabel( scores, cex = 0.5) # Label sample IDs
 
+```
+
+|           In the PCOA above, blue = low *p*$CO_{2}$, yellow = moderate *p*$CO_{2}$, and red = high *p*$CO_{2}$. From this plot, we can see that treatment and time both influence multivariate gene expression across the RNA-seq samples. By and large, samples cluster according to these two predictors in a manner consistent with what we would expect from our experimental design if *p*$CO_{2}$ and time were to affect gene expression.
+
+```{r, message = FALSE, warning = FALSE}
+
 logCPM.pca <- prcomp( t ( df_log ) )
 logCPM.pca.proportionvariances <- ( ( logCPM.pca$sdev ^ 2 ) / ( sum( logCPM.pca$sdev ^ 2 ) ) ) * 100
 
@@ -241,7 +254,10 @@ ordihull( logCPM.pca$x, targets$grouping,
 
 ```
 
-|           From this PCOA, we can see that treatment and time both influence multivariate gene expression across the RNA-seq samples. By and large, samples also cluster according to these two predictors in a manner consistent with what we would expect from our experimental design. After conducting QC analyses and plots of the read count data, it is time to begin model fitting and testing for differential expression. 
+|           This plot is only a slight adjustment of the first PCOA. If you'd like to wrap each multifactorial group and get a better idea of potential overlap between clusters, the plot and code above can be applied to do so. 
+
+
+|           Now that we have conducted QC analyses and plots of the read count data, it is time to begin model fitting and testing for differential expression.
 
 #Non-linear effects 
 
@@ -252,13 +268,15 @@ knitr::include_graphics("images/Rivera_etal_fig.png")
 ```
 From Rivera *et al.* 2021 - "Transcriptomic resilience and timing. (a) Gene expression reaction norms of four strategies during recovery after a stressor. We use triangles again for patterns that may confer tolerance and circles for patterns associated with stress sensitivity. While all triangle paths show a return to baseline (resilience) the pink (frontloading) and yellow (dampening) are also depicting differences in baseline and plasticity and are therefore labelled differently. (b) Adapted from the rolling ball analogy commonly used for ecological resilience and depicted in Hodgson et al. (2015). Each ball represents a gene showing a color-matched expression pattern in (a). Landscapes represent expression possibilities during a stress event. In the absence of stress, the ball will settle in a trough, representing baseline expression levels. Elasticity (rate of return to the baseline) is represented by the size of the arrow (i.e., larger arrows have faster rates of return). Pink dotted line is the expression landscape for the frontloaded ball. (c) Using Torres et al. (2016) loops through disease space as an alternative framework of an organism's path through stress response and recovery. The colour gradient represents the resulting phenotype for a given path through stress and recovery space, though x-and y-axis can denote any two parameters that are correlated but with a time lag."
 
-|           Non-linear reaction norms can be modelled across time, such as Rivera *et al.* have presented, or across multiple levels of an abiotic variable such as temperature, pH, etc in order to fit a performance curve. Performance curves are a fundamental tool in ecological physiology, and enable more robust hypothesis testing in RNA-seq studies of environmental acclimation. For example, testing for variation in the shape of gene expression performance curves between early and longterm exposure timepoints can provide critical information about the role of gene expression in acclimation. Below we outline how to fit and test for non-linear gene expression performance curves in multifactorial RNA-seq experiments using examples in edgeR, DESeq2, and in-house code.    
+|           Non-linear reaction norms can be modelled across time, such as Rivera *et al.* have presented, or across multiple levels of an abiotic variable such as temperature, pH, etc in order to fit a performance curve. Performance curves are a fundamental tool in ecological physiology, and enable more robust hypothesis testing in RNA-seq studies of environmental acclimation. For example, testing for variation in the shape of gene expression performance curves between early and longterm exposure timepoints can provide critical information about the role of gene expression in acclimation. Below we outline how to fit and test for non-linear gene expression performance curves in multifactorial RNA-seq experiments using examples in edgeR, DESeq2, and custom code.    
 |           One of the simplest non-linear relationships that can be fitted to the expression of a transcript across an continuous variable is a second-order polynomial, otherwise known as a quadratic function, which can be expressed as $y_{i} = \mu + \beta_{1}x^2 + \beta_{2}x$ where $y$ is the abundance of a given transcript ($i$), $\mu$ is the intercept, and $y$ is the continuous variable. For the parabola generated by fitting a second-order polynomial, $\beta_{1}$ > 0 opens the parabola upwards while $\beta_{1}$ < 0 opens the parabola downwards. The vertex of the parabola is controlled by $\beta_{2}$ such that when $\beta_{1}$ is negative, greater $\beta_{2}$ values result in the vertex falling at higher values of $x$. 
 |           Quadratic polynomials applied to phenotypic performance curves commonly possess negative $\beta_{1}$ values with positive $\beta_{2}$ values: a downard-opening parabola with a positive vertex. However, quadtratic curves fitted to gene expression data can take on a variety of postiive or negative forms similar to exponential curves, saturating curves, and parabolas. For instance, the expression of a gene may peak an intermediate level of an environmental level before crashing or it may exponentially decline across that variable. Such trends may better model changes in the transcription of a gene compared to a linear model. To get started, we will fit non-linear second order polynomials before testing for whether model predictions for a given gene are significantly improved by a non-linear linear model. 
 
 ##Non-linear effects: example in edgeR
 
 |           Let's fit a second-order polynomial for the effect of *p*CO$_{2}$ using edgeR. Using differential expression tests, we will then determine whether *p*CO$_{2}$ affected a gene's rate of change in expression and expression maximum by applying differential expression tests to $\beta_{1}$ and $\beta_{2}$ parameters. By testing for differential expression attributed to intereactions between time and $\beta_{1}$ or $\beta_{2}$, we will then test for whether these parameters were significantly different across exposure times such that 0.5 days and 7 days of acclimation to *p*CO$_{2}$ altered the rate of change in expression across *p*CO$_{2}$ ($\beta_{1}$) or the maximum of expression ($\beta_{2}$).
+
+|          Since this is the first time we're fitting models to our data in this walkthrough, we will also output some important plots to help us explore and QC model predictions as we work toward testing for differential expression attributed to non-linear effects.
 
 ```{r, message = FALSE, warning = FALSE}
 
@@ -271,12 +289,18 @@ y1 <- estimateDisp( y, robust = TRUE ) # Estimate mean dispersal
 # Plot tagwise dispersal and impose w/ mean dispersal and trendline
 plotBCV( y1 ) 
 
+```
+
+|           The above figure is an output of the plotBCV() function in edgeR, which visualises the biological coefficient of variation (otherwise known as dispersion) parameter fitted to individual genes (black circles), fitted across gene expression level (blue trendline), and averaged across the entire transcriptome (red horizontal line). The BCV/dispersion parameter is a necessary parameter, symbolized as $\theta$ in model specification, that must be estimated in negative binomial GLMs. $\theta$ represents the 'overdispersion' or the shape of a negative binomial distribution and is thus important for defining the distribution of read count data for a given gene during model fitting. Dispersion or $\theta$ can be input during model fitting in edgeR using the three estimates visualized in the above regression.
+
+|           Now that we've estimated dispersion, we will use these estimates to fit negative binomial GLMs to our read count data using the glmQLFit() function in edgeR, one of the more robust model fitting functions offered by edgeR.
+
+```{r, message = FALSE, warning = FALSE}
 # Fit multifactorial design matrix
 design_nl <- model.matrix( ~1 + pCO2_2 + pCO2 + pCO2_2:day + pCO2:day ) # Generate multivariate edgeR glm
 
 # Fit quasi-likelihood, neg binom linear regression
 nl_fit <- glmQLFit( y1, design_nl ) # Fit multivariate model to counts
-plotQLDisp( nl_fit, col.shrunk = "red", col.raw = "black", col.trend = NULL )
 
 ## Test for effect of pCO2 and pCO2^2
 nl_pCO2_2 <- glmQLFTest( nl_fit, coef = 2, contrast = NULL, poisson.bound = FALSE ) # Estimate significant DEGs
@@ -292,12 +316,22 @@ summary( is.de_nl_pCO2_2 )
 
 ```
 
-|           We have just fit our first GLM to our read count data and have tested for differential expression across *p*CO$_{2}$. At this stage, it is important to output a few diagnostic plots. For example, edgeR has the function 'plotMD()' which, when input with a differential expression test object such as a glmQLFTest, will produce a plot of differential expression log2 fold change values across gene expression level (log2 counts per million or logCPM). logCPM is a major component of gene function and statistical power, and is a useful variable to plot in order to make initial assessments of differential expression results. 
+|           We have just fit our first GLM to our read count data and have tested for differential expression across *p*CO$_{2}$. At this stage, it is important to output a few diagnostic plots. For example, edgeR has the function 'plotMD()' which, when input with a differential expression test object such as a glmQLFTest result, will produce a plot of differential expression log2 fold change values across gene expression level (log2 counts per million or logCPM). logCPM is a major component of gene function and statistical power, and is a useful variable to plot in order to make initial assessments of differential expression results.
+
+|           Visualizations of differential expression (logFC) across baseline logCPM can be produced by the plotMD() (short for "mean-difference") function in edgeR. To do so, plotMD() is input with the results of glmQLFTest, which we used above to test for differential expression attributable to the parameters *p*CO$_{2}$ and *p*CO$_{2}$^2. Let's produce two such plots for both parameters where "pCO2_2" represents the *p*CO$_{2}$^2 parameter:
 
 ```{r, message = FALSE, warning = FALSE}
 # Plot differential expression due to pCO2 and pCO2^2
 plotMD( nl_pCO2 )
 plotMD( nl_pCO2_2 )
+
+```
+
+|           In the two mean-difference plots above, large colored points represent genes exhibiting significant differential expression attributed to *p*CO$_{2}$ or *p*CO$_{2}$^2 below. As you can see, there is a lot of differential expression in this experiment resulting from both of these parameters. Part of the reason for this large number of significant differentially expressed genes (DEGs) is that we have not applied a cutoff value for logFC. For example, a logFC cutoff of 2.0 value would not designate any genes with an absolute logFC value less than 0.05 as a significant DEG. However, deciding on a logFC cutoff is very tricky! Since we used a continuous predictor for *p*CO$_{2}$ during model fitting, the values in the y-axis of this plot are slopes representing the rate of change in expression per unit *p*CO$_{2}$ ($\mu$atm). Determining what slope represents a significant change in expression requires informed reasoning and a strong body of prior data. For that reason, we are not applying a logFC cutoff in this walkthrough.
+
+|           Next, we will use glmQLFTest() to test for differential expression attributed to interactions between time and *p*CO$_{2}$ or time and *p*CO$_{2}$^2 before producing mean-difference plots visualizing DEGs derived from these two interactions:
+
+```{r}
 
 ## Test for interactions between time and pCO2 or pCO2^2
 nl_pCO2_int <- glmQLFTest( nl_fit, coef = 4, contrast = NULL, poisson.bound = FALSE ) # Estimate significant DEGs
@@ -317,7 +351,9 @@ plotMD( nl_pCO2_2_int )
 
 ```
 
-|           Additionally, we can now output the residuals of our GLMs in order to better test for whether our data fit the assumptions of negative binomial distribution families. If the distribution of residuals from our GLMs are normal, this indicates that our data meet the assumption of the negative binomial distribution. We will use the equation for estimating Pearson residuals: $$ residual = \frac{observed - fitted} {\sqrt{fitted(dispersion*fitted)}} $$
+|           In the mean-difference plots above, it is clear that there is remarkably less differential expression associated with interactions between time and *p*CO$_{2}$ or *p*CO$_{2}$^2 compared to the direct effects of *p*CO$_{2}$ and *p*CO$_{2}$^2. This is expected, as the statistical power necessary for detecting such interactions is lesser and there are grounds to expect that interactions would be less frequent during our experiment.
+
+|           Taking a detour from tests for DEGs attributed to non-linear interactions, we can now output the residuals of our GLMs in order to better test for whether our data fit the assumptions of negative binomial distribution families. If the distribution of residuals from our GLMs are normal, this indicates that our data meet the assumption of the negative binomial distribution. We will use the equation for estimating Pearson residuals: $$ residual = \frac{observed - fitted} {\sqrt{fitted(dispersion*fitted)}} $$
 
 ```{r, message = FALSE, warning = FALSE}
 
@@ -348,6 +384,8 @@ ggplot(data = melt(as.data.frame(resid.pearson)), aes(x = value)) +
 ```
 
 |           Our residuals appear to be normally distributed, indicating that our data fit the negative binomial distribution assumed by the GLM.
+
+|           Now let's get back to analyzing non-linear effects on gene expression!
 
 ##Plotting non-linear effects
 
@@ -551,25 +589,23 @@ ggplot(data = edgeR_interaction_avg,
 
 ```
 
-|         After visualizing variation in expression across *p*CO$_{2}$ for genes identified in edgeR to be affected by interactions between *p*CO$_{2}$^2 and exposure time, we can see interesting changes in gene expression curves across time. For example, genes that exhibited a convex expression curve at 0.5 days of exposure generally modified their curve such that their expression became postiviely exponential relative to *p*CO$_{2}$. One potenetial explanation for this change is that the upregulation of some genes under intermediate *p*CO$_{2}$ was reudced following acclimation, while less acclimation may have occurred at the higher *p*CO$_{2}$ level after 7 days. Genes with a concave expression curves across *p*CO$_{2}$ at 0.5 days of exposure exhibited a marked decrease in expression as the experiment progressed, regardless of *p*CO$_{2}$ level. Thus, the interaction between *p*CO$_{2}$^2 and time may affect 'convex' and 'concave' genes in entirely different ways, underscorign the importance of partitioning or binning your data by parameters such as *p*CO$_{2}$^2. Exploring your data in this way is important for understanding interactive effects in RNA-seq analyses, regardless of whether or not you are fittting non-linear or linear continuous effects. Below we discuss further considerations for modeling interactions between linear continuous predictors.
+|         After visualizing variation in expression across *p*CO$_{2}$ for genes identified in edgeR to be affected by interactions between *p*CO$_{2}$^2 and exposure time, we can see interesting changes in gene expression curves across time. For example, genes that exhibited a convex expression curve at 0.5 days of exposure generally modified their curve such that their expression became postiviely exponential relative to *p*CO$_{2}$. One potential explanation for this change is that the upregulation of some genes under intermediate *p*CO$_{2}$ was reduced following acclimation, while less acclimation may have occurred at the higher *p*CO$_{2}$ level after 7 days. Genes with a concave expression curves across *p*CO$_{2}$ at 0.5 days of exposure exhibited a marked decrease in expression as the experiment progressed, regardless of *p*CO$_{2}$ level. Thus, the interaction between *p*CO$_{2}$^2 and time may affect 'convex' and 'concave' genes in entirely different ways, underscorign the importance of partitioning or binning your data by parameters such as *p*CO$_{2}$^2. Exploring your data in this way is important for understanding interactive effects in RNA-seq analyses, regardless of whether or not you are fittting non-linear or linear continuous effects. Below we discuss further considerations for modeling interactions between linear continuous predictors.
 
 #Interactive effects
 
-|         Interactive effects shaping gene expression are common in nature and are becoming increasingly prevalent in models of gene expression derived from experimental studies. Below, we outline methods for fitting intereactive effects using categorical and continuous variables in models of expression. We provide examples in edgeR, DESeq2, and Voom before comparing correlations between these programs' fold change (logFC) predictions and test statistics. 
+|         Interactive effects shaping gene expression are common in nature and are becoming increasingly prevalent in models of gene expression derived from experimental studies. Below, we go a little bit deeper on interactive effects by outlining methods for fitting them using categorical and continuous variables in models of expression. We provide examples in edgeR, DESeq2, and Voom and point out how specification for interactive effects differs between these packages. Lastly, we compare correlations between these programs' fold change (logFC) predictions and test statistics. This final comparison of model predictions for interaction parameters is as much a tutorial on interactive effects as it is a tutorial on how to visualize differences in DE packages' results. Please use section of the code for any comparisons between DE packages you may want to make for other effect types, not just interactive effects!
 
 ##Interactive effects: edgeR
 
+|         edgeR and Voom both take the same syntax for interactive effects, which we define below using the model.matrix() function as 'design_multi <- model.matrix( ~1 + pCO2 + pCO2:day )'. Then, we will use this multifactorial model design in both edgeR and Voom as specified below:
+
 ```{r, message = FALSE, warning = FALSE}
 
-# Fit multifactoria design matrix
+# Fit multifactoria design matrix that includes an interaction term for pCO2 x day
 design_multi <- model.matrix( ~1 + pCO2 + pCO2:day ) #Generate multivariate edgeR glm
-
-# Ensure that design matrix looks correct
-colnames( design_multi )
 
 # Fit quasi-likelihood, neg binom linear regression
 multi_fit <- glmQLFit( y1, design_multi ) # Fit multivariate model to counts
-plotQLDisp( multi_fit, col.shrunk = "red", col.raw = "black", col.trend = NULL )
 
 # Test for effect of pCO2
 tr_pCO2 <- glmQLFTest( multi_fit, coef = 2, contrast = NULL, poisson.bound = FALSE ) # Estimate significant DEGs
@@ -578,30 +614,40 @@ is.de_tr_pCO2 <- decideTestsDGE( tr_pCO2, adjust.method = "fdr", p.value = 0.05 
 
 summary( is.de_tr_pCO2 )
 
-plotMD( tr_pCO2 )
-
-# Interaction
-tr_int <- glmQLFTest( multi_fit, coef = 2, poisson.bound = FALSE ) # Estimate significant DEGs
+# Test for interaction between pCO2 and time
+tr_int <- glmQLFTest( multi_fit, coef = 3, poisson.bound = FALSE ) # Estimate significant DEGs
 
 is.de_int <- decideTestsDGE( tr_int, adjust.method = "fdr", p.value = 0.05 ) # Make contrasts
 
 summary( is.de_int )
 
-plotMD( tr_int )
-
-# Check residuals
-edgeR_res <- residuals( multi_fit, type = "pearson" )
-head( edgeR_res )
-
 ```
 
 ##Interactive effects: limma-voom
+
+|         Below we will fit the same 'design_multi' model (y ~ 1 + *p*CO$_{2}$ + *p*CO$_{2}$:days) to our read counts using Voom rather than edgeR. As stated earlier, Voom fits interactions between fixed effects using the same syntax as edgeR, so the 'design_multi' object can be used by both programs. 
+
+|         What *is* different between edgeR and Voom is the manner by which Voom accounts for variation between replicates. Rather than using gene-wise or averaged estimations of biological coefficients of variation and inputting these values as $\theta$ in a negative binomial GLM, Voom models what is referred to as the mean-variance relationship and incorpates this relationship within a linear model rather than a GLM by "weighting" the accuracy of a given observation based on its level of expression and modelled variance. This mean-variance relationship can be plotted by Voom after model fitting as we show below:
 
 ```{r, message = FALSE, warning = FALSE}
 
 # Perform voom transformation
 voom <- voom( y, design_multi, plot = T )
 
+```
+
+|         When deciding between packages for testing DGE, it can be helpful to compare model assumptions regarding variance by plotting graphs like Voom's mean-variance relationship above and the output of edgeR's 'plotBCV()' function, which we provided an example of earlier and will replot below for the sake of making thsi visual comparison. Take note that the y-axes of these variance plots in Voom (square root of standard deviation) and edgeR (biological coefficent of variation) are different: 
+
+```{r, message = FALSE, warning = FALSE, include = FALSE}
+
+# Replot edgeR BCV
+plotBCV( y1 )
+
+```
+
+|         The mean-variance relationships modelled in edgeR and Voom are generally similar, but it appears that Voom assumes even lesser variance in expression among genes at the highest expression level. One result of this may be that greater statistical power is assumed in tests of differential expression by Voom for genes with high expression relative to low expression genes. Keep this in mind as we continue to move forward with fitting parameters for interactions between *p*CO$_{2}$ and time in Voom.
+
+```{r, message = FALSE, warning = FALSE}
 # Fit using voom
 lm_voom_fit <- lmFit( voom, design_multi )
 
@@ -612,41 +658,42 @@ cont_pCO2 <- contrasts.fit( lm_voom_fit, coef = "pCO2" )
 cont_pCO2_day <- contrasts.fit( lm_voom_fit, coef = "pCO2:day" )
 
 # Perform empirical Bayes smoothing of standard errors
-lm_voom_fit <- eBayes( lm_voom_fit )
+cont_pCO2 <- eBayes( cont_pCO2 )
+cont_pCO2_day <- eBayes( cont_pCO2_day )
 
 # Output test statistics
-pCO2_results <- topTable( lm_voom_fit, coef = "pCO2", adjust.method="fdr", n = Inf )
-pCO2_day_results <- topTable( lm_voom_fit, coef = "pCO2:day", adjust.method="fdr", n = Inf )
+pCO2_results <- topTable( cont_pCO2, coef = "pCO2", adjust.method="fdr", n = Inf )
+pCO2_day_results <- topTable( cont_pCO2_day, coef = "pCO2:day", adjust.method="fdr", n = Inf )
 
-# How many DEG are associated with pCO2 and pCO2:day?
-length( which( pCO2_results$adj.P.Val < 0.05 & abs( pCO2_results$logFC ) > ( 4 / 600 ) ) ) # number of DE genes = 7091
-length( which( pCO2_results$adj.P.Val < 0.05  ) ) # number of DE genes
+# How many DEGs are associated with pCO2
+length( which( pCO2_results$adj.P.Val < 0.05  ) ) # number of DE genes =
 
-length( which( pCO2_day_results$adj.P.Val < 0.05 & 
-                 abs( pCO2_day_results$logFC ) > ( 4 / 600 ) ) ) # number of DE genes = 7091
-length( which( pCO2_day_results$adj.P.Val < 0.05  ) ) # number of DE genes
+# How many DEGs are associated with pCO2:day?
+length( which( pCO2_day_results$adj.P.Val < 0.05  ) )
 
 ```
 
+|         Voom has identified 1628 genes whose variation is affected by an interaction between *p*CO$_{2}$ and time, compared to 1748 identified by edgeR.
+
 ##Interactive effects: DESeq2
 
-As such, the DESeq2 code below only fits the interaction term to the read count data.
+|         DESeq2 requires a slightly different syntax for specifying interactive effects compared to edgeR and Voom.
 
-```{r, echo = FALSE}
+```{r, message = FALSE, warning = FALSE}
 
-gcounts <- as.data.frame( data_input )
+gcounts <- as.data.frame(data_input)
 
-totalCounts <- colSums( gcounts )
+totalCounts <- colSums(gcounts)
 
 ### REMOVE GENES WITH LOW MEAN COUNTS ###
 
 # Make a DGEList object for edgeR
-y <- DGEList( counts = data_input, remove.zeros = TRUE )
+y <- DGEList(counts = data_input, remove.zeros = TRUE)
 
 # Let's remove samples with less then 0.5 cpm (this is ~10 counts in the count file) in fewer then 9/12 samples
-keep_g <- rowSums( cpm( gcounts ) > .5 ) >= 9
+keep_g <- rowSums(cpm( gcounts ) > .5) >= 9
 
-table( keep_g )
+table(keep_g)
 
 # Set keep.lib.sizes = F and recalculate library sizes after filtering
 #gcounts <- gcounts[ keep_g, keep.lib.sizes = FALSE ]
@@ -656,30 +703,105 @@ targets
 
 ### WALD TEST - FULL MODEL ###
 
-dds <- DESeqDataSetFromMatrix( gcounts,
-                               colData = targets,
-                               design = formula( ~ 1 + pCO2 + day : pCO2 ) )
+dds <- DESeqDataSetFromMatrix(gcounts,
+                              colData = targets,
+                              design = formula( ~ 1 + pCO2 + day : pCO2))
 
-rld <- rlog( dds )
-rld.df <- assay( rld )
+rld <- rlog(dds)
+rld.df <- assay(rld)
 
 # Wald test for pCO2:day
-dds_int <- DESeq( dds, minReplicatesForReplace = Inf )
+dds_int <- DESeq(dds, minReplicatesForReplace = Inf)
 
 design <- design( dds_int )
 
-DESeq2_int_result_names <- resultsNames( dds_int )
+DESeq2_int_result_names <- resultsNames(dds_int)
 
-DESeq2_int_results <- results( dds_int, name = "pCO2.day" )
+# Count DEGs due to interaction
+DESeq2_int_results <- results(dds_int, name = "pCO2.day", lfcThreshold = 0, alpha = 0.05)
+
+summary(DESeq2_int_results)
 
 ```
+
+|         DESeq2 has identified 4985 genes whose variation is affected by an interaction between *p*CO$_{2}$ and time, compared to 1748 identified by edgeR and 1628 by Voom. This is a ~3-fold greater number of DEGs predicted by DESeq2 compared to edgeR and Voom. 
+
+#Comparing test statistics: interactive effects
+
+|         Differential expression packages can make dramatically different predictions for both the fold-change and probability of differential expression. If you find yourself deciding between different packages or wanting to compare how conservative different approaches are, it helps to run regressions of model predictions by different packages. Below we apply the ggpairs() function from GGAlly [@Schloerke2018-rq] to plot a correlation matrix of logFC values and negative log-transformed p-values attributed to interactive effects between time and *p*CO$_{2}$ predicted by edgeR, DESeq2, and Voom:
+
+```{r, message = FALSE, warning = FALSE}
+
+# Merge logFC and pval data from each program
+voom_edgeR_deseq_int_comp <- merge( 
+  merge(
+    data.frame(geneid = row.names(pCO2_day_results),
+               voom_logFC = pCO2_day_results$logFC,
+               voom_pval = pCO2_day_results$P.Value),
+    data.frame(geneid = row.names(tr_int$table),
+               edgeR_logFC = tr_int$table$logFC, #negate logFC because of syntax differences
+               edgeR_pval = tr_int$table$PValue), 
+    by = "geneid" ),
+  data.frame(geneid = row.names(DESeq2_int_results),
+             DESeq2_logFC = DESeq2_int_results$log2FoldChange,
+             DESeq2_pval = DESeq2_int_results$pvalue),
+  by = "geneid")
+
+# Create neg log pvalues
+voom_edgeR_deseq_int_comp$voom_neglogp <- -log(voom_edgeR_deseq_int_comp$voom_pval)
+voom_edgeR_deseq_int_comp$edgeR_neglogp <- -log(voom_edgeR_deseq_int_comp$edgeR_pval)
+voom_edgeR_deseq_int_comp$DESeq2_neglogp <- -log(voom_edgeR_deseq_int_comp$DESeq2_pval)
+
+# Create function for adding 1:1 trendline on ggpairs plot and plotting geom_hex instead of geom_point
+my_fn <- function(data, mapping, ...){
+  p <- ggplot(data = data, mapping = mapping) + 
+    geom_hex( bins = 100,
+            aes(fill = stat(log(count))), alpha = 1 ) +
+    scale_fill_viridis_c() +
+    geom_abline(slope=1, intercept = 0, color = "red", lty = 2, size = 1, alpha = 0.5)
+  p
+}
+
+# Correlation matrix of pvalues
+pval_pairs <- ggpairs(data = voom_edgeR_deseq_int_comp,
+                      columns = c(8, 9, 10),
+                      mapping = aes(alpha = 0.001),
+                      lower = list(continuous = my_fn)) +
+  labs(title = "Correlation matrix: interaction p-values")
+
+pval_pairs +
+  theme_classic(base_rect_size = 0)
+
+```
+
+|         The above plot is the output of ggpairs() showing correlations between negative log-transformed p-values attributed to interactive effects of time x *p*CO$_{2}$ estimated between each of the three packages, as well as the distributions of this parameter for each package, and correlation statistics. Red dashed lines represent a slope equal to 1. Yellow colors depict regions of each linear regression with more observations.
+
+|         Voom and edgeR share the largest correlation between p-values estimated for an interactive effect of *p*CO$_{2}$ : days on differential expression (R$^2$ = 0.965). The bottom row of this ggpairs plot shows tranformed p-values from DESeq2 on the y-axis, which appear to be skewed toward lower p-values/higher -log p-values. This is consistent with the fact that we observed ~3-fold more DEGs attributed to the *p*CO$_{2}$ : days interaction when running DESeq2 compared to edgeR and Voom.
+
+|         Next, let's create a ggpairs() plot contrasting logFC estimates of DE attributed to *p*CO$_{2}$ : days in edgeR, Voom, and DESeq2. One might think that logFCs should demonstrate stronger correlations between programs compared to p-values, but due to the manners by which read counts are normalized and transformed in different packages this is not always the case!
+
+```{r, message = FALSE, warning = FALSE}
+
+# Correlation matrix of logFC's
+logFC_pairs <- ggpairs(data = voom_edgeR_deseq_int_comp,
+                       columns = c( 2, 4, 6 ),
+                       mapping = aes( alpha = 0.001 ),
+                       lower = list(continuous = my_fn)) +
+  labs(title = "Correlation matrix: interaction logFC's")
+
+logFC_pairs +
+  theme_classic(base_rect_size = 0)
+
+```
+
+|         In this pairs plot of logFC estimates across packages, you can see that R$^2$ values are, on average, lower than those of p-value correlations between packages. Once again, the strongest correlation exists between edgeR and Voom. However, the slope of this correlation is less than 1, indicating that absolute edgeR logFC's are lower on average than absolute Voom logFCs. The correlation pair that shows a slope closest to 1.0 is edgeR vs. DESeq2. edgeR and DESeq2 normalize read counts in a similar manner, and thus a value derived from differences in read counts across continuous predictors such as logFC is likely to be more similar between these packages.
 
 #Random Intercepts: example in voom 
 
 We will skip edgeR and DESeq2 since they cannot fit random effects.
 
 |         Random intercepts (often referred to as random effects) can be an essential component of estimating differential expression in experiments that incorporate non-independent observations (e.g., repeated measures and nested designs: individuals within populations or families) or randomly sampled groups. Most differential expression packages do not possess functionality for fitting random intercepts, extending GLMs to generalized linear mixed models or GLMMs, but voom does! Additional packages that we don't cover here also possess random intercept functionality, including dream [@Hoffman2021-br] and [glmmSeq](https://cran.r-project.org/web/packages/glmmSeq/index.html).
-|         Below is an example of how to fit a random intercept associated with the time variable of our dataset:
+|         Below is an example of how to fit a random intercept associated with the time variable of our dataset using Voom:
 
 ```{r, message = FALSE, warning = FALSE}
 
@@ -689,6 +811,12 @@ design_rand <- model.matrix( ~1 + pCO2 + ( 1 | day ) ) #Generate multivariate ed
 # Perform voom transformation
 voom_rand <- voom( y, design_rand, plot = T )
 
+```
+
+|         If you compare the mean-variance plot from our mixed model above, with our first mean-variance plot from the Voom model that did not include a random effect you will notice that the modelled relationship between variance and mean expression is considerably different between the two. While the linear model mean-variance plot took on a negative exponential shape by which earlier increases in expression level associate with a precipitous decline in variance, our mixed model's fit takes on a more logarithmic shap and the raw points appear parabolic. Here, variance is modelled as remaining somewhat constant during early increases in expression level before declining more rapidly across intermediate expression levels. Additionally, Voom predicted a maximum variance of 2.0 in our linear model while the mixed model above predicts a maximum of 1.5. This reduction in overall variance may partially be explained by incorporating a random intercept for time rather than modelling it as a continuous fixed effect. As we progress through the DE test derived this mixed model, we will anticipate that a reduction in variance will influence our results, likely by increasing the statistical power of genewise DE tests, and that modelling time as a random effect will also modify what and how many genes are identified as differentially expressed.
+
+```{r, message = FALSE, warning = FALSE}
+
 # Fit using voom
 lm_voom_fit_rand <- lmFit( voom_rand, design_rand )
 
@@ -696,196 +824,80 @@ lm_voom_fit_rand <- lmFit( voom_rand, design_rand )
 cont_rand_day <- contrasts.fit( lm_voom_fit_rand, coef = "pCO2" )
 
 # Perform empirical Bayes smoothing of standard errors
-lm_voom_fit_rand <- eBayes( lm_voom_fit_rand )
+cont_rand_day <- eBayes( cont_rand_day )
 
 # Output test statistics
-rand_results <- topTable( lm_voom_fit_rand, coef = "pCO2", adjust.method = "fdr", n = Inf )
+rand_results <- topTable( cont_rand_day, coef = "pCO2", adjust.method = "fdr", n = Inf )
 
-# How many DEG are associated with pCO2 and pCO2:day?
-length( which( rand_results$adj.P.Val < 0.05 & abs( rand_results$logFC ) > ( 4 / 600 ) ) ) # number of DE genes = 7091
-length( which( rand_results$adj.P.Val < 0.05  ) ) # number of DE genes
-
-length( which( rand_results$adj.P.Val < 0.05 & 
-                 abs( rand_results$logFC ) > ( 4 / 600 ) ) ) # number of DE genes = 7091
+# How many DEG are associated with pCO2 after incorporating a random effect for day?
 length( which( rand_results$adj.P.Val < 0.05  ) ) # number of DE genes
 
 ```
 
+|         While the linear Voom model's DE test output 0 predicted DEG's associated with *p*CO${_2}$, the mixed Voom model predicted 3 genes. As we saw eariler when fitting linear models, the majority of DEG's in this study were derived from an interaction between time and *p*CO${_2}$. We modelled this as an interaction between two continuous fixed effects, but random effects and continuous effects can also jointly influence outome variables. Such effects can be fit in mixed models using 'random slopes', which we describe in the next section.
+
 #Random slopes
 
-|         Distinct from the random intercept, testing for variation in gene expression attributed to a random slope effect asks "Within a set of groups, does the reaction norm of gene expression across a continuous predictor randomly by group?". This question is relavent to experimental designs testing for differences in the plasticity of gene expression across randomly-selected demographics such as genotypes or families. For these kinds of groups, modelling an interaction between the continuous predictor and a categorical effecat representing different groups would be inappropriate, as the use of a categorical effect should be reserved for groups-of-interest specific selected in an experiment (e.g., different sexes, populations inhabiting distinct environments, etc.). To our knowledge however, there is no well-documented differential expression package that enables the fitting of random slopes. Below we detail a custom script for fitting gaussian linear mixed models using lme4 and negative binomial GLMs to read count data. For practical purposes, we will treat exposure time as a random variable even though timepoints were not randomly selected in the experiment that produced our data and apply. We will also apply linear mixed models using lmer, which is computationally intensive. The models fitted below are input with a highly filtered and reduced set of read count data.
+|         Distinct from the random intercept, testing for variation in gene expression attributed to a random slope effect asks "Within a set of groups, does the reaction norm of gene expression across a continuous predictor randomly by group?". This question is relavent to experimental designs testing for differences in the plasticity of gene expression across randomly-selected demographics such as genotypes or families. For these kinds of groups, modelling an interaction between the continuous predictor and a categorical effecat representing different groups would be inappropriate, as the use of a categorical effect should be reserved for groups-of-interest specific selected in an experiment (e.g., different sexes, populations inhabiting distinct environments, etc.). To our knowledge however, there is no well-documented differential expression package that enables the fitting of random slopes. 
+
+|         Below we detail custom scripts for fitting gaussian linear mixed models using lme4 and negative binomial GLMs to read count data. For practical purposes, we will treat exposure time as a random variable even though timepoints were not randomly selected in the experiment that produced our data and apply. We will also apply linear mixed models using lmer, which is computationally intensive. The models fitted below are input with a highly filtered and reduced set of read count data. After fitting a LMM to each gene with a random slope parameter by which the effect of *p*CO${_2}$ randomly varies across time, we will compare the likelihoods of these models to those of a 'null' LMM that only possesses a random intercept associated with time. We will then count and report the number of genes that show significantly high likelihoods for random slopes. 
 
 ```{r, message = FALSE, warning = FALSE}
 
 ## For practical purposes, reduce size of input data in order to run lmer in for loop without using up memory
 # Re-filter data
-keep_red <- rowSums( cpm( y ) > 3 & cpm( y ) < 10 ) >= 12
+keep_red <- rowSums(cpm(y) > 3 & cpm(y) < 10) >= 12
 
 # Apply read filter to tab_exp_df
 tab_exp_df_filt <- filter(tab_exp_df, geneid %in% 
                             row.names(filter(as.data.frame(keep_red), keep_red == TRUE)))
 
-# Using dlply, fit linear mixed model to tabularized df of log2-transformed CPM values for each transcript... should take 15 minutes w/ 7 cores
+# Using dlply, fit linear mixed model to tabularized df of log2-transformed CPM values for each transcript
 tab_exp_df_filt$time <- as.factor(tab_exp_df_filt$time)
 rs_lmes <- dlply(tab_exp_df_filt, c("geneid"), function(df) 
-lmer(value ~ pCO2 + (pCO2 | time), data = df))
+lmer(value ~ pCO2 + (1 | time) + (pCO2 | time), data = df))
 
-# Output rs_lme coefficients into dataframe
-## Filter lrt results for transcripts with significantly higher likelihoods of nl model
-rs_lme_dfs <- list()
+# Fit null model without random slope
+null_lmes <- dlply(tab_exp_df_filt, c("geneid"), function(df) 
+lmer(value ~ pCO2 + (1 | time), data = df))
 
-# Turn list of lmer outputs into list of dataframes containing output info
-for (name in names(rs_lmes)) {
- rs_lme_dfs[[name]] <- coef(rs_lmes[[name]])$time
+# Apply LRT to each gene to test for effect of random slope
+lmer_lrts <- list() # Create list to add LRT results to
+
+for (i in 1:length(rs_lmes)) {
+ lmer_lrts[[i]] <- lrtest(rs_lmes[[i]], null_lmes[[i]]) # Apply LRTs with for loop
 }
 
-# Output F and p-values from anova's of lmer models
-rs_lme_aovs <- list()
+## Filter lrt results for transcripts with significantly higher likelihoods than null model
+lmer_lrt_dfs <- list()
 
-for (name in names(rs_lmes)) {
- rs_lme_aovs[[name]] <- as.data.frame(anova(rs_lmes[[name]]))
+# Turn list of LRT outputs into list of dataframes containing output info
+for (i in 1:length(lmer_lrts)) {
+ lmer_lrt_dfs[[i]] <- data.frame(lmer_lrts[i])
 }
 
-# Create singular dataframe containing geneid's, time points, and their random pCO2 slopes
-rs_lme_coef_df  <- na.omit(bind_rows(rs_lme_dfs, .id = "column_label"))
-rs_lme_coef_df$time <- ifelse(grepl("0.5", row.names(rs_lme_coef_df)), "0.5", "7")
+# Create singular dataframe with geneids and model outputs for chi-squared and LRT p-value
+lmer_lrt_coeff_df  <- na.omit(bind_rows(lmer_lrt_dfs, .id = "column_label")) # na.omit removes first row of each df, which lacks these data
 
-# Create binary variable for sign of pCO2 slope
-rs_lme_coef_df$Sign <- ifelse(rs_lme_coef_df$pCO2 > 0, "Positive", "Negative")
+# Add geneid based on element number from original list of LRT outputs
+lmer_lrt_coeff_df <- merge(lmer_lrt_coeff_df,
+                      data.frame(geneid = names(rs_lmes),
+                                 column_label = as.character(seq(length(rs_lmes)))),
+                      by = "column_label")
 
-# Create singular dataframe containing geneid's, F-values, and p values from anova's of lmer models
-rs_lme_aov_df  <- na.omit(bind_rows(rs_lme_aovs, .id = "column_label"))
+# Apply FDR adjustment to LRT p-values before filtering for sig non-linear effects
+lmer_lrt_coeff_df$FDR <- p.adjust(lmer_lrt_coeff_df$Pr..Chisq., method = "fdr")
 
-# Adjust aov p-values using FDR and filter results for significant effects of pCO2
-rs_lme_aov_df$FDR <- p.adjust(rs_lme_aov_df$`Pr(>F)`, method = "fdr")
-sig_lme_list <- filter(rs_lme_aov_df, FDR < 0.05)
+# Filter LRT results for sig FDR coeff...
+lmer_lrt_filt <- filter(lmer_lrt_coeff_df, FDR < 0.05)
 
-# Plot random slopes grouped by timepoint
-ggplot(data = filter(rs_lme_coef_df, column_label %in% sig_lme_list$column_label),
-       aes(x = as.numeric(time), y = pCO2, group = column_label)) +
-  geom_path(alpha = 0.1, size = .5) +
-  theme_classic() +
-  labs(y = "pCO2 effect (logCPM/uatm)", x = "Exposure time (days)", 
-       title = "Random slopes of DE genes across time")
+# How many genes showed significant LRT?... none!
+count(lmer_lrt_filt)
 
 ```
 
-#Comparing test statistics
+#Conclusion: Moving forward with multifactorial RNA-seq
 
-|         Differential expression packages can make dramatically different predictions for both the fold-change and probability of differential expression. If you find yourself deciding between different packages or wanting to compare how conservative different approaches are, it helps to run regressions of model predictions by different packages. Below we apply the ggpairs() function from GGAlly to plot a correlation matrix of logFC values and negative log-transformed p-values from edgeR, DESeq2, and voom:
+|         If you've made it this far, you've probably found it to be a common theme that popular DE packages do not provide all of the flexibility necessary for fitting models to data coming from multifactorial experimental designs, even some of the more standard designs. It should be restated that our walkthrough only scratches the surface of (i) available packages that can facilitate multifactorial DE tests and (ii) opportunities that custom scripts for model fitting provide. For example, our example code for fitting linear and linear mixed models before testing for effects using likelihood ratio tests can easily be edited to fit negative binomial GLMs such as those used by edgeR and DESeq2 input with $\theta$ estimates (e.g., dispersion) from edgeR or custom estimates, and we encourage readers to try out this strategy! If you have personal code that you believe would make a valuable addition to this walkthrough, don't hesitate to post a GitHub issue or submit a pull-request to us. We will review the suggestions and add your name to the list this page's authors! We hope that this page and others on the website can serve as a living document that can keep pace with advances in multifactorial RNA-seq analyses, which lend fidelity to experimental designs that are necessary for generating reproducible and predictive results.
 
-```{r, message = FALSE, warning = FALSE}
 
-# Merge logFC and pval data from each program
-voom_edgeR_deseq_int_comp <- merge( 
-  merge(
-    data.frame( geneid = row.names( pCO2_day_results ),
-                voom_logFC = pCO2_day_results$logFC,
-                voom_pval = pCO2_day_results$P.Value ),
-    data.frame( geneid = row.names( tr_int$table ),
-                edgeR_logFC = -( tr_int$table$logFC ), #negate logFC because of syntax differences
-                edgeR_pval = tr_int$table$PValue ), 
-    by = "geneid" ),
-  data.frame( geneid = row.names( DESeq2_int_results ),
-              DESeq2_logFC = DESeq2_int_results$log2FoldChange,
-              DESeq2_pval = DESeq2_int_results$pvalue ),
-  by = "geneid" )
-
-# Create neg log pvalues
-voom_edgeR_deseq_int_comp$voom_neglogp <- -log( voom_edgeR_deseq_int_comp$voom_pval )
-voom_edgeR_deseq_int_comp$edgeR_neglogp <- -log( voom_edgeR_deseq_int_comp$edgeR_pval )
-voom_edgeR_deseq_int_comp$DESeq2_neglogp <- -log( voom_edgeR_deseq_int_comp$DESeq2_pval )
-
-# Correlation matrix of pvalues
-pval_pairs <- ggpairs( data = voom_edgeR_deseq_int_comp,
-                       columns = c( 8, 9, 10 ),
-                       mapping = aes( alpha = 0.001 ) ) +
-  labs( title = "Correlation matrix: interaction p-values" )
-
-pval_pairs
-
-# Create neg log pvalues
-voom_edgeR_deseq_int_comp$voom_neglogp <- -log( voom_edgeR_deseq_int_comp$voom_pval )
-voom_edgeR_deseq_int_comp$edgeR_neglogp <- -log( voom_edgeR_deseq_int_comp$edgeR_pval )
-voom_edgeR_deseq_int_comp$DESeq2_neglogp <- -log( voom_edgeR_deseq_int_comp$DESeq2_pval )
-
-# Correlation matrix of logFC's
-logFC_pairs <- ggpairs( data = voom_edgeR_deseq_int_comp,
-                       columns = c( 2, 4, 6 ),
-                       mapping = aes( alpha = 0.001 ) ) +
-  labs( title = "Correlation matrix: interaction logFC's" )
-
-logFC_pairs
-
-# Correlation of logFC
-ggplot( data = voom_edgeR_deseq_int_comp,
-        aes( x = voom_logFC, y = edgeR_logFC ) ) +
-  geom_hex( bins = 100,
-            aes(fill = stat( log( count ) ) ) ) +
-  theme_classic() +
-  scale_fill_viridis_c() +
-  geom_smooth( method = "lm", color = "red", lty = 2 ) +
-  labs( title = "Interactions: edgeR vs. limma-voom logFC's", 
-        x = "limma-voom logFC",
-        y = "edgeR logFC" )
-
-# Correlations between pvals
-ggplot( data = voom_edgeR_deseq_int_comp,
-        aes( x = -log( voom_pval ), y = -log( edgeR_pval ) ) ) +
-  geom_hex( bins = 100,
-            aes(fill = stat( log( count ) ) ) ) +
-  theme_classic() +
-  scale_fill_viridis_c() +
-  geom_smooth( method = "lm", color = "red", lty = 2 ) +
-  labs( title = "Interactions: edgeR vs. limma-voom p-values", 
-        x = "limma-voom pval",
-        y = "edgeR pval" )
-
-# Correlation of logFC: edgeR vs DESeq2 
-ggplot( data = voom_edgeR_deseq_int_comp,
-        aes( x = DESeq2_logFC, y = edgeR_logFC ) ) +
-  geom_hex( bins = 100,
-            aes(fill = stat( log( count ) ) ) ) +
-  theme_classic() +
-  scale_fill_viridis_c() +
-  geom_smooth( method = "lm", color = "red", lty = 2 ) +
-  labs( title = "Interactions: edgeR vs. DESeq2 logFC's", 
-        x = "DESeq2 logFC",
-        y = "edgeR logFC" )
-
-# Correlation of logFC: edgeR vs DESeq2 
-ggplot( data = voom_edgeR_deseq_int_comp,
-        aes( x = -log( DESeq2_pval ), y = -log( edgeR_pval ) ) ) +
-  geom_hex( bins = 100,
-            aes(fill = stat( log( count ) ) ) ) +
-  xlim( values = c( 0, 20 ) ) +
-  theme_classic() +
-  scale_fill_viridis_c() +
-  geom_smooth( method = "lm", color = "red", lty = 2 ) +
-  labs( title = "Interactions: edgeR vs. DESeq2 p-values", 
-        x = "DESeq2 logFC",
-        y = "edgeR logFC" )
-
-```
-
-|         This linear mixed model can also be modified and fit to non-log transformed CPM counts as a generalized linear mixed model using a negative binomial distribution, similar to that employed by edgeR and DESeq2. The code chunk below uses our reduced data to produce an example of fitting customized glmm's. Negative binomial model family requires a value for $\theta$ (e.g., the CV or dispersion of expression per gene). In this case, we will use the function 'glmer.nb()' from lme4, which will automatically estimate $\theta$ for all models.
-
-```{r, message = FALSE, warning = FALSE}
-
-# Reverse log2 transormation by exponentiating
-#tab_exp_df_filt$CPM <- 2^tab_exp_df_filt$value
-
-# Scale predictor pCO2 variable to assist with glmer fitting
-#tab_exp_df_filt$pCO2_Z <- scale(tab_exp_df_filt$pCO2)
-
-# Merge dispersion estimates with tab_exp_df_filt
-#tab_exp_df_filt <- merge(tab_exp_df_filt,
-                         #data.frame(geneid = row.names(y1$counts),
-                                    #Disp = y1$tagwise.dispersion),
-                         #by = "geneid")
-
-# Fit glmmer's with dispersion estimates
-#rs_glmms <- dlply(tab_exp_df_filt, c("geneid"), function(df) 
-#glmer.nb(CPM ~ pCO2_Z + (pCO2_Z | time) , data = df))
-
-```
